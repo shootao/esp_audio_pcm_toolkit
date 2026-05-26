@@ -1,0 +1,34 @@
+menu "Basic Example"
+
+    choice BASIC_EXAMPLE_RECORD_CHANNELS
+        prompt "Record channel count (PCM to PC)"
+        default BASIC_EXAMPLE_RECORD_CHANNELS_4
+        help
+            Must match PC monitor Channels setting.
+
+        config BASIC_EXAMPLE_RECORD_CHANNELS_3
+            bool "3 channels"
+        config BASIC_EXAMPLE_RECORD_CHANNELS_4
+            bool "4 channels"
+    endchoice
+
+    config BASIC_EXAMPLE_RECORD_CHANNELS
+        int
+        default 3 if BASIC_EXAMPLE_RECORD_CHANNELS_3
+        default 4 if BASIC_EXAMPLE_RECORD_CHANNELS_4
+
+    config BASIC_EXAMPLE_DEFAULT_PLAY_VOL
+        int "Default playback volume (0-100)"
+        range 0 100
+        default 70
+
+    config BASIC_EXAMPLE_DEFAULT_MIC_GAIN
+        int "Default mic gain in dB (0-36)"
+        range 0 36
+        default 30
+
+    config RECORD_CHANNELS
+        int
+        default BASIC_EXAMPLE_RECORD_CHANNELS
+
+endmenu

@@ -1,0 +1,16 @@
+version: "0.1.0"
+description: PCM streaming and remote audio control for Espressif boards, with PC monitor tools
+url: https://github.com/espressif/esp-gmf/tree/main/test/hi_nomi_record_play/components/esp_audio_pcm_toolkit
+documentation: "https://github.com/espressif/esp-gmf/blob/main/test/hi_nomi_record_play/components/esp_audio_pcm_toolkit/README.md"
+issues: "https://github.com/espressif/esp-gmf/issues"
+
+tags:
+  - "audio"
+  - "pcm"
+  - "gmf"
+
+dependencies:
+  idf: ">=5.0"
+
+examples:
+  - path: ./examples/basic_example

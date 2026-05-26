@@ -1,0 +1,1583 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Espressif USB Audio Monitor</title>
+  <style>
+    :root {
+      --esp-red: #e7352c;
+      --esp-red-dark: #c42e26;
+      --esp-red-light: #fef2f2;
+      --bg: #eef0f4;
+      --panel: #ffffff;
+      --text: #1a1a2e;
+      --muted: #64748b;
+      --accent: var(--esp-red);
+      --wave-bg: #e8ecf4;
+      --wave-line: #2563eb;
+      --wave-center: #94a3b8;
+      --border: #e2e8f0;
+      --shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 4px 16px rgba(15, 23, 42, 0.04);
+      --radius: 12px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ── */
+    .site-header {
+      background: #fff;
+      border-bottom: 3px solid var(--esp-red);
+      box-shadow: var(--shadow);
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+
+    .brand-logo {
+      height: 26px;
+      width: auto;
+      flex-shrink: 0;
+    }
+
+    .header-main {
+      flex: 1;
+      min-width: 200px;
+    }
+
+    .header-main h1 {
+      margin: 0;
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: var(--text);
+      letter-spacing: -0.02em;
+    }
+
+    .header-sub {
+      margin: 4px 0 0;
+      font-size: 0.85rem;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    .site-footer {
+      text-align: center;
+      padding: 12px 20px;
+      font-size: 0.72rem;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+      background: #fff;
+      margin-top: auto;
+    }
+
+    /* ── Layout ── */
+    .wrap {
+      max-width: 1140px;
+      margin: 0 auto;
+      padding: 20px 24px 28px;
+      width: 100%;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+      margin-bottom: 16px;
+      box-shadow: var(--shadow);
+    }
+
+    .panel-title {
+      font-size: 0.78rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--esp-red);
+      margin: 0 0 14px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+    }
+
+    label {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--muted);
+    }
+
+    input, select {
+      padding: 8px 11px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.92rem;
+      background: #fff;
+      color: var(--text);
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+
+    input:focus, select:focus {
+      outline: none;
+      border-color: var(--esp-red);
+      box-shadow: 0 0 0 3px rgba(231, 53, 44, 0.12);
+    }
+
+    .port-row {
+      display: grid;
+      grid-template-columns: 1fr 120px auto auto;
+      gap: 12px;
+      align-items: end;
+    }
+
+    /* ── Buttons ── */
+    .btn-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 8px;
+      padding: 9px 16px;
+      font-size: 0.88rem;
+      font-weight: 500;
+      cursor: pointer;
+      background: var(--esp-red);
+      color: #fff;
+      transition: background 0.15s, transform 0.1s;
+    }
+
+    button:hover:not(:disabled) {
+      background: var(--esp-red-dark);
+    }
+
+    button:active:not(:disabled) {
+      transform: scale(0.98);
+    }
+
+    button.secondary {
+      background: #fff;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    button.secondary:hover:not(:disabled) {
+      background: #f8fafc;
+      border-color: #cbd5e1;
+    }
+
+    button.danger {
+      background: #fff;
+      color: #b45309;
+      border: 1px solid #fcd34d;
+    }
+
+    button.danger:hover:not(:disabled) {
+      background: #fffbeb;
+    }
+
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    /* ── Stats ── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .stat-card {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+
+    .stat-card .label {
+      font-size: 0.72rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 4px;
+    }
+
+    .stat-card .value {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .stat-card.status-connected .value { color: #16a34a; }
+    .stat-card.status-disconnected .value { color: var(--muted); }
+
+    .meter-bar {
+      height: 6px;
+      background: #e2e8f0;
+      border-radius: 999px;
+      overflow: hidden;
+      margin-top: 12px;
+    }
+
+    .meter-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #f87171, var(--esp-red));
+      transition: width 60ms linear;
+      border-radius: 999px;
+    }
+
+    /* ── Waveform ── */
+    .wave-panel {
+      padding: 0;
+      overflow: hidden;
+      cursor: crosshair;
+    }
+
+    .wave-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, #f8fafc, #f1f5f9);
+      font-size: 0.9rem;
+      font-weight: 500;
+    }
+
+    .wave-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      padding: 8px 18px;
+      border-bottom: 1px solid var(--border);
+      background: #fafbfc;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    .wave-toolbar button {
+      padding: 5px 12px;
+      font-size: 0.8rem;
+    }
+
+    .wave-tracks {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .wave-track {
+      border-bottom: 1px solid var(--border);
+    }
+
+    .wave-track:last-child { border-bottom: none; }
+
+    .wave-track-label {
+      padding: 4px 18px;
+      font-size: 0.78rem;
+      font-weight: 500;
+      color: var(--muted);
+      background: #f1f5f9;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .wave-track canvas {
+      display: block;
+      width: 100%;
+      height: 96px;
+      background: var(--wave-bg);
+    }
+
+    /* ── Hints & warnings ── */
+    .hint-box {
+      font-size: 0.8rem;
+      color: var(--muted);
+      line-height: 1.6;
+      margin-top: 14px;
+      padding: 12px 14px;
+      background: #f8fafc;
+      border-radius: 8px;
+      border-left: 3px solid var(--esp-red);
+    }
+
+    .hint-box strong { color: var(--text); }
+
+    .warn-banner {
+      display: none;
+      background: var(--esp-red-light);
+      border: 1px solid #fca5a5;
+      color: #991b1b;
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      font-size: 0.88rem;
+      line-height: 1.5;
+    }
+
+    .warn-banner.show { display: block; }
+
+    .port-hint {
+      padding: 10px 12px;
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+      font-size: 0.85rem;
+      color: var(--muted);
+      line-height: 1.5;
+      background: #f8fafc;
+    }
+
+    code {
+      background: #f1f5f9;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-size: 0.88em;
+    }
+
+    .ctrl-hint {
+      font-size: 0.88rem;
+      color: #64748b;
+      margin: 0 0 12px;
+    }
+
+    .ctrl-row {
+      display: block;
+      margin-bottom: 14px;
+    }
+
+    .ctrl-inline {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 6px;
+    }
+
+    .ctrl-inline input[type="range"] {
+      flex: 1;
+    }
+
+    .ctrl-inline input[type="number"] {
+      width: 64px;
+    }
+
+    .ctrl-unit {
+      color: #64748b;
+      font-size: 0.9rem;
+      min-width: 24px;
+    }
+
+    .mic-gain-grid {
+      display: grid;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .mic-gain-row {
+      display: grid;
+      grid-template-columns: 72px 1fr 72px;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .mic-gain-row label {
+      font-weight: 600;
+      color: #334155;
+      font-size: 0.92rem;
+    }
+
+    .mic-gain-row input[type="number"] {
+      width: 72px;
+    }
+
+    @media (max-width: 640px) {
+      .port-row { grid-template-columns: 1fr 1fr; }
+      .site-header { padding: 12px 16px; }
+      .wrap { padding: 14px 16px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <a href="https://www.espressif.com" target="_blank" rel="noopener noreferrer">
+      <img src="espressif-logo.svg" alt="Espressif Systems" class="brand-logo" />
+    </a>
+    <div class="header-main">
+      <h1>USB Audio Monitor</h1>
+      <p class="header-sub" id="modeHint">
+        双击 <code>start_monitor.bat</code> 启动 · 选择 COM 口后点「连接」
+      </p>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div class="warn-banner" id="fileWarn">
+      当前是直接打开的 HTML（file://），无法使用串口。请双击 <code>start_monitor.bat</code>。
+    </div>
+
+    <div class="warn-banner" id="bridgeWarn">
+      未连接到 Python 串口桥接。请重新双击 <code>start_monitor.bat</code>，
+      使用黑窗口里显示的地址（通常是 <code>http://127.0.0.1:8765/...</code>）。
+    </div>
+
+    <div class="panel">
+      <h2 class="panel-title">串口连接</h2>
+      <div class="port-row" id="portRow">
+        <label id="portSelectWrap">Serial Port (CDC)
+          <select id="portSelect"><option value="">-- refresh ports --</option></select>
+        </label>
+        <label id="manualPortWrap">Manual COM
+          <input id="manualPort" type="text" placeholder="COM23" />
+        </label>
+        <label>Baud
+          <input id="baudRate" type="number" value="115200" min="9600" max="3000000" step="1" />
+        </label>
+        <button id="refreshBtn" class="secondary">Refresh</button>
+        <div id="portHint" class="port-hint" hidden style="grid-column:1/-1">
+          Web Serial mode: click Connect COM Port, pick USB Serial/JTAG in Chrome popup.
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" id="devCtrlPanel">
+      <h2 class="panel-title">设备控制</h2>
+      <p class="ctrl-hint">连接 USB COM 口后下发命令（<code>vol</code> / <code>gch</code>），设备不在 USB 上回显，避免污染 PCM。</p>
+      <label class="ctrl-row">
+        播放音量
+        <div class="ctrl-inline">
+          <input id="devPlayVol" type="range" min="0" max="100" step="1" value="70" disabled />
+          <input id="devPlayVolNum" type="number" min="0" max="100" step="1" value="70" disabled />
+          <span class="ctrl-unit">%</span>
+        </div>
+      </label>
+      <div id="micGainControls" class="mic-gain-grid"></div>
+      <div class="btn-row">
+        <button id="applyDevCtrlBtn" class="secondary" disabled>Apply to device</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2 class="panel-title">音频参数</h2>
+      <div class="grid">
+        <label>Sample Rate (Hz)
+          <input id="sampleRate" type="number" value="16000" min="8000" max="192000" step="1000" />
+        </label>
+        <label>Channels
+          <select id="channels">
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4" selected>4</option>
+          </select>
+        </label>
+        <label>Bits
+          <select id="bits">
+            <option value="16" selected>16 (signed)</option>
+            <option value="8">8 (unsigned)</option>
+          </select>
+        </label>
+        <label>Monitor Channel
+          <select id="monitorCh">
+            <option value="0">Ch0</option>
+            <option value="1">Ch1</option>
+            <option value="2">Ch2</option>
+            <option value="3">Ch3</option>
+            <option value="mix">Mix All</option>
+          </select>
+        </label>
+        <label>Endian
+          <select id="endian">
+            <option value="le" selected>Little Endian</option>
+            <option value="be">Big Endian</option>
+          </select>
+        </label>
+        <label>Wave Window (s)
+          <select id="waveWindow">
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3" selected>3</option>
+            <option value="5">5</option>
+            <option value="8">8</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="btn-row">
+        <button id="connectBtn">连接 COM 口</button>
+        <button id="disconnectBtn" class="secondary" disabled>Disconnect</button>
+        <button id="pauseBtn" class="secondary" disabled>暂停</button>
+        <button id="playBtn" disabled>开启实时播放</button>
+        <button id="saveBtn" class="secondary" disabled>Save WAV</button>
+        <button id="clearBtn" class="danger" disabled>Clear</button>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card status-disconnected" id="statusCard">
+          <div class="label">Status</div>
+          <div class="value" id="status">Disconnected</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Bytes</div>
+          <div class="value" id="byteCount">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Duration</div>
+          <div class="value" id="duration">0.0 s</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Peak</div>
+          <div class="value" id="peakVal">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">RMS</div>
+          <div class="value" id="rmsVal">0</div>
+        </div>
+      </div>
+      <div class="meter-bar"><div id="meterFill" class="meter-fill"></div></div>
+
+      <div class="hint-box">
+        <strong>PCM 格式：</strong>多通道交错（Ch0, Ch1, … 按采样点排列），参数须与固件一致<br>
+        <strong>增益命令：</strong><code>gch 0 30</code> = Ch0，与下方滑条 <code>data-ch</code> 一致（0 起）<br>
+        <strong>波形操作：</strong>滚轮缩放 · Shift+滚轮平移 · 「跟随最新」回实时末尾<br>
+        <strong>注意：</strong>USB 口应只发 PCM；Log/Console 请走其它串口，避免污染波形
+      </div>
+    </div>
+
+    <div class="panel wave-panel" id="wavePanel">
+      <div class="wave-header">
+        <span id="trackName">Waveform</span>
+        <span id="waveInfo">Waiting for data...</span>
+      </div>
+      <div class="wave-toolbar">
+        <button id="followBtn" class="secondary" type="button">跟随最新</button>
+        <span id="viewInfo">滚轮缩放 · Shift+滚轮平移</span>
+      </div>
+      <div id="waveTracks" class="wave-tracks"></div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    All Espressif's logos are trademarks of Espressif Systems (Shanghai) Co., Ltd.
+  </footer>
+
+  <script>
+    const els = {
+      fileWarn: document.getElementById('fileWarn'),
+      bridgeWarn: document.getElementById('bridgeWarn'),
+      portRow: document.getElementById('portRow'),
+      portSelectWrap: document.getElementById('portSelectWrap'),
+      manualPortWrap: document.getElementById('manualPortWrap'),
+      manualPort: document.getElementById('manualPort'),
+      portHint: document.getElementById('portHint'),
+      modeHint: document.getElementById('modeHint'),
+      portSelect: document.getElementById('portSelect'),
+      baudRate: document.getElementById('baudRate'),
+      refreshBtn: document.getElementById('refreshBtn'),
+      sampleRate: document.getElementById('sampleRate'),
+      channels: document.getElementById('channels'),
+      bits: document.getElementById('bits'),
+      monitorCh: document.getElementById('monitorCh'),
+      endian: document.getElementById('endian'),
+      waveWindow: document.getElementById('waveWindow'),
+      connectBtn: document.getElementById('connectBtn'),
+      disconnectBtn: document.getElementById('disconnectBtn'),
+      pauseBtn: document.getElementById('pauseBtn'),
+      playBtn: document.getElementById('playBtn'),
+      saveBtn: document.getElementById('saveBtn'),
+      clearBtn: document.getElementById('clearBtn'),
+      followBtn: document.getElementById('followBtn'),
+      viewInfo: document.getElementById('viewInfo'),
+      wavePanel: document.getElementById('wavePanel'),
+      status: document.getElementById('status'),
+      statusCard: document.getElementById('statusCard'),
+      byteCount: document.getElementById('byteCount'),
+      duration: document.getElementById('duration'),
+      peakVal: document.getElementById('peakVal'),
+      rmsVal: document.getElementById('rmsVal'),
+      meterFill: document.getElementById('meterFill'),
+      waveTracks: document.getElementById('waveTracks'),
+      waveInfo: document.getElementById('waveInfo'),
+      devPlayVol: document.getElementById('devPlayVol'),
+      devPlayVolNum: document.getElementById('devPlayVolNum'),
+      micGainControls: document.getElementById('micGainControls'),
+      applyDevCtrlBtn: document.getElementById('applyDevCtrlBtn'),
+    };
+
+    const DEFAULT_PLAY_VOL = 70;
+    const DEFAULT_MIC_GAIN_DB = 30;
+    const MIC_GAIN_DB_MAX = 36.5;
+
+    const useNativeBridge = () => typeof window.pywebview !== 'undefined' && window.pywebview.api;
+    const useBridgeApi = () => useNativeBridge() || httpBridge;
+    const useWebSerial = () => !useBridgeApi() && 'serial' in navigator;
+    const api = () => window.pywebview?.api;
+
+    let httpBridge = false;
+
+    async function detectHttpBridge() {
+      if (location.protocol !== 'http:') {
+        httpBridge = false;
+        return false;
+      }
+      if (location.hostname !== '127.0.0.1' && location.hostname !== 'localhost') {
+        httpBridge = false;
+        return false;
+      }
+      try {
+        const res = await fetch('/api/ports', { cache: 'no-store' });
+        if (!res.ok) {
+          httpBridge = false;
+          return false;
+        }
+        const json = await res.json();
+        httpBridge = json.bridge === true;
+        return httpBridge;
+      } catch {
+        httpBridge = false;
+        return false;
+      }
+    }
+
+    function selectedPortName() {
+      const manual = (els.manualPort?.value || '').trim();
+      if (manual) return manual.toUpperCase().startsWith('COM') ? manual.toUpperCase() : manual;
+      return els.portSelect.value;
+    }
+
+    function setupPortUi() {
+      if (els.fileWarn) {
+        if (location.protocol === 'file:') {
+          els.fileWarn.classList.add('show');
+        } else {
+          els.fileWarn.classList.remove('show');
+        }
+      }
+      if (els.bridgeWarn) {
+        if (httpBridge || useNativeBridge() || location.protocol === 'file:') {
+          els.bridgeWarn.classList.remove('show');
+        } else {
+          els.bridgeWarn.classList.add('show');
+        }
+      }
+
+      if (els.portSelectWrap) els.portSelectWrap.hidden = false;
+      if (els.manualPortWrap) els.manualPortWrap.hidden = false;
+      if (els.refreshBtn) els.refreshBtn.hidden = false;
+      if (els.portHint) els.portHint.hidden = true;
+      if (els.portRow) els.portRow.style.gridTemplateColumns = '1fr 120px auto auto';
+
+      if (useNativeBridge()) {
+        els.modeHint.textContent = 'Native 模式：下拉选择 CDC 串口，或 Manual COM 填 COM23。';
+      } else if (httpBridge) {
+        els.modeHint.textContent = 'Python 桥接 OK：点 Refresh 列出 COM 口，或 Manual COM 填 COM23。';
+      } else {
+        els.modeHint.textContent = '未连接桥接：请双击 start_monitor.bat，用黑窗口里的 URL 打开（如 http://127.0.0.1:8765/...）';
+      }
+    }
+
+    let connected = false;
+    let pollTimer = null;
+    let webSerialPort = null;
+    let webSerialReader = null;
+    let webSerialWriter = null;
+    let playbackEnabled = false;
+    let streamPaused = false;
+    let followLive = true;
+    let totalBytes = 0;
+    let recordedChunks = [];
+    let audioCtx = null;
+    let scriptNode = null;
+    let gainNode = null;
+
+    const HISTORY_CHUNK = 16000;
+    const PLAY_RING_SIZE = 96000;
+    let histData = [];
+    let histLen = 0;
+    let viewOffset = 0;
+    let viewSpan = 16000 * 3;
+    let waveCanvases = [];
+    let playRing = new Float32Array(PLAY_RING_SIZE);
+    let playW = 0;
+    let playR = 0;
+    let playCount = 0;
+    let playPhase = 0;
+    let waveDirty = false;
+    let drawPending = false;
+
+    function resetHistory() {
+      histData = [];
+      histLen = 0;
+      viewOffset = 0;
+      viewSpan = cfg().sampleRate * Number(els.waveWindow?.value || 3);
+      followLive = true;
+    }
+
+    function ensureHistChannel(ch) {
+      while (histData.length <= ch) {
+        histData.push([]);
+      }
+    }
+
+    function pushHistory(samples) {
+      const idx = histLen++;
+      for (let ch = 0; ch < samples.length; ch++) {
+        ensureHistChannel(ch);
+        const chunkIdx = Math.floor(idx / HISTORY_CHUNK);
+        if (!histData[ch][chunkIdx]) {
+          histData[ch][chunkIdx] = new Float32Array(HISTORY_CHUNK);
+        }
+        histData[ch][chunkIdx][idx % HISTORY_CHUNK] = samples[ch];
+      }
+      if (followLive) {
+        viewSpan = cfg().sampleRate * cfg().waveWindowSec;
+        viewOffset = Math.max(0, histLen - viewSpan);
+      }
+    }
+
+    function histSample(ch, index) {
+      if (index < 0 || index >= histLen) return 0;
+      const chunkIdx = Math.floor(index / HISTORY_CHUNK);
+      const chunk = histData[ch]?.[chunkIdx];
+      if (!chunk) return 0;
+      return chunk[index % HISTORY_CHUNK];
+    }
+
+    function clampView() {
+      const minSpan = 128;
+      const maxSpan = Math.max(minSpan, histLen || cfg().sampleRate * 30);
+      viewSpan = Math.min(Math.max(viewSpan, minSpan), maxSpan);
+      const maxOffset = Math.max(0, histLen - viewSpan);
+      viewOffset = Math.min(Math.max(viewOffset, 0), maxOffset);
+    }
+
+    function updateViewInfo() {
+      if (!els.viewInfo) return;
+      const c = cfg();
+      const startSec = (viewOffset / c.sampleRate).toFixed(2);
+      const endSec = ((viewOffset + viewSpan) / c.sampleRate).toFixed(2);
+      const totalSec = (histLen / c.sampleRate).toFixed(2);
+      els.viewInfo.textContent = `视图 ${startSec}s - ${endSec}s / 总长 ${totalSec}s · 滚轮缩放 · Shift+滚轮平移`;
+    }
+
+    function channelLabels(n) {
+      return Array.from({ length: n }, (_, i) => `Ch${i}`);
+    }
+
+    function refreshMonitorChOptions() {
+      if (!els.monitorCh) return;
+      const n = micCountFromUi();
+      const labels = channelLabels(n);
+      const prev = els.monitorCh.value;
+      els.monitorCh.innerHTML = '';
+      for (let ch = 0; ch < n; ch++) {
+        const opt = document.createElement('option');
+        opt.value = String(ch);
+        opt.textContent = labels[ch];
+        els.monitorCh.appendChild(opt);
+      }
+      const mix = document.createElement('option');
+      mix.value = 'mix';
+      mix.textContent = 'Mix All';
+      els.monitorCh.appendChild(mix);
+      if (prev === 'mix' || (Number(prev) >= 0 && Number(prev) < n)) {
+        els.monitorCh.value = prev;
+      } else {
+        els.monitorCh.value = '0';
+      }
+    }
+
+    function initWaveTracks() {
+      const n = cfg().channels;
+      els.waveTracks.innerHTML = '';
+      waveCanvases = [];
+      resetHistory();
+
+      const labels = channelLabels(n);
+      for (let ch = 0; ch < n; ch++) {
+        const track = document.createElement('div');
+        track.className = 'wave-track';
+
+        const label = document.createElement('div');
+        label.className = 'wave-track-label';
+        label.textContent = labels[ch] ?? `Ch${ch}`;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = 1200;
+        canvas.height = 100;
+
+        track.appendChild(label);
+        track.appendChild(canvas);
+        els.waveTracks.appendChild(track);
+        waveCanvases.push(canvas);
+      }
+      drawWaveform();
+    }
+
+    function cfg() {
+      let sampleRate = Number(els.sampleRate.value);
+      if (!Number.isFinite(sampleRate) || sampleRate < 1000 || sampleRate > 192000) {
+        sampleRate = 16000;
+      }
+      return {
+        sampleRate,
+        channels: Number(els.channels.value),
+        bits: Number(els.bits.value),
+        monitorCh: els.monitorCh.value,
+        endian: els.endian.value,
+        waveWindowSec: Number(els.waveWindow?.value || 3),
+      };
+    }
+
+    function normalizeSampleRateInput() {
+      const raw = Number(els.sampleRate.value);
+      if (!Number.isFinite(raw)) {
+        els.sampleRate.value = '16000';
+        return;
+      }
+      if (raw > 192000) {
+        els.sampleRate.value = '16000';
+        alert('Sample Rate looks wrong (not baud rate). Use 16000 for ESP PCM.');
+      }
+    }
+
+    function frameBytes() {
+      const c = cfg();
+      return c.channels * (c.bits / 8);
+    }
+
+    function bytesPerSecond() {
+      const c = cfg();
+      return c.sampleRate * c.channels * (c.bits / 8);
+    }
+
+    function setStatus(text) {
+      els.status.textContent = text;
+      if (els.statusCard) {
+        const ok = /connect/i.test(text) && !/disconnect/i.test(text);
+        els.statusCard.classList.toggle('status-connected', ok);
+        els.statusCard.classList.toggle('status-disconnected', !ok);
+      }
+    }
+
+    function setConnected(on) {
+      connected = on;
+      els.connectBtn.disabled = on;
+      els.disconnectBtn.disabled = !on;
+      if (els.statusCard) {
+        els.statusCard.classList.toggle('status-connected', on);
+        els.statusCard.classList.toggle('status-disconnected', !on);
+      }
+      if (els.pauseBtn) {
+        els.pauseBtn.disabled = !on;
+        if (!on) {
+          streamPaused = false;
+          els.pauseBtn.textContent = '暂停';
+        }
+      }
+      if (els.playBtn) els.playBtn.disabled = !on;
+      if (els.saveBtn) els.saveBtn.disabled = !on;
+      if (els.clearBtn) els.clearBtn.disabled = !on;
+      if (els.portSelect) els.portSelect.disabled = on;
+      if (els.refreshBtn) els.refreshBtn.disabled = on;
+      if (els.devPlayVol) els.devPlayVol.disabled = !on;
+      if (els.devPlayVolNum) els.devPlayVolNum.disabled = !on;
+      if (els.applyDevCtrlBtn) els.applyDevCtrlBtn.disabled = !on;
+      document.querySelectorAll('.mic-gain-slider, .mic-gain-num').forEach((el) => {
+        el.disabled = !on;
+      });
+    }
+
+    function micCountFromUi() {
+      const n = Number(els.channels?.value || 4);
+      return n >= 3 && n <= 4 ? n : 4;
+    }
+
+    function syncPlayVolFromSlider() {
+      if (!els.devPlayVol || !els.devPlayVolNum) return;
+      els.devPlayVolNum.value = els.devPlayVol.value;
+    }
+
+    function syncPlayVolFromNumber() {
+      if (!els.devPlayVol || !els.devPlayVolNum) return;
+      let v = Number(els.devPlayVolNum.value);
+      if (!Number.isFinite(v)) v = DEFAULT_PLAY_VOL;
+      v = Math.min(100, Math.max(0, v));
+      els.devPlayVol.value = String(v);
+      els.devPlayVolNum.value = String(v);
+    }
+
+    function bindMicGainRow(ch) {
+      const slider = document.querySelector(`.mic-gain-slider[data-ch="${ch}"]`);
+      const num = document.querySelector(`.mic-gain-num[data-ch="${ch}"]`);
+      if (!slider || !num) return;
+      slider.addEventListener('input', () => {
+        num.value = slider.value;
+      });
+      num.addEventListener('change', () => {
+        let v = Number(num.value);
+        if (!Number.isFinite(v)) v = DEFAULT_MIC_GAIN_DB;
+        v = Math.min(MIC_GAIN_DB_MAX, Math.max(0, v));
+        num.value = v.toFixed(1);
+        slider.value = String(v);
+      });
+    }
+
+    function buildMicGainControls() {
+      if (!els.micGainControls) return;
+      els.micGainControls.innerHTML = '';
+      const n = micCountFromUi();
+      for (let i = 0; i < n; i++) {
+        const row = document.createElement('div');
+        row.className = 'mic-gain-row';
+        row.innerHTML = `
+          <label>Ch${i}</label>
+          <input type="range" class="mic-gain-slider" data-ch="${i}" min="0" max="${MIC_GAIN_DB_MAX}" step="0.5" value="${DEFAULT_MIC_GAIN_DB}" ${connected ? '' : 'disabled'} />
+          <input type="number" class="mic-gain-num" data-ch="${i}" min="0" max="${MIC_GAIN_DB_MAX}" step="0.5" value="${DEFAULT_MIC_GAIN_DB}" ${connected ? '' : 'disabled'} />
+        `;
+        els.micGainControls.appendChild(row);
+        bindMicGainRow(i);
+      }
+    }
+
+    async function sendDeviceCmd(line) {
+      if (!connected) {
+        return false;
+      }
+      const payload = line.endsWith('\n') ? line : `${line}\n`;
+      if (useNativeBridge()) {
+        const ret = await api().send_cmd(payload.trim());
+        return !!ret.ok;
+      }
+      if (httpBridge) {
+        const res = await fetch('/api/cmd', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ line: payload.trim() }),
+        });
+        const ret = await res.json();
+        return !!ret.ok;
+      }
+      if (webSerialPort && webSerialWriter) {
+        await webSerialWriter.write(new TextEncoder().encode(payload));
+        return true;
+      }
+      return false;
+    }
+
+    async function applyDeviceControls() {
+      if (!connected) {
+        alert('请先连接 COM 口');
+        return;
+      }
+      syncPlayVolFromNumber();
+      const vol = Number(els.devPlayVolNum.value);
+      if (!(await sendDeviceCmd(`vol ${vol}`))) {
+        alert('下发播放音量失败');
+        return;
+      }
+      const nums = document.querySelectorAll('.mic-gain-num');
+      for (const inp of nums) {
+        const ch = Number(inp.dataset.ch);
+        const db = Number(inp.value);
+        if (!(await sendDeviceCmd(`gch ${ch} ${db.toFixed(1)}`))) {
+          alert(`下发 Ch${ch} 增益失败`);
+          return;
+        }
+      }
+      setStatus(`Device: vol ${vol}%, ${nums.length} mic gain(s) applied`);
+    }
+
+    function updateStats() {
+      els.byteCount.textContent = totalBytes.toLocaleString();
+      els.duration.textContent = (totalBytes / bytesPerSecond()).toFixed(1) + ' s';
+    }
+
+    function readSample(view, byteOffset, bits, endian) {
+      if (bits === 16) {
+        const v = endian === 'le' ? view.getInt16(byteOffset, true) : view.getInt16(byteOffset, false);
+        return v / 32768;
+      }
+      return (view.getUint8(byteOffset) - 128) / 128;
+    }
+
+    function deinterleaveFrame(view, offset, c) {
+      const bps = c.bits / 8;
+      const out = new Array(c.channels);
+      for (let ch = 0; ch < c.channels; ch++) {
+        out[ch] = readSample(view, offset + ch * bps, c.bits, c.endian);
+      }
+      return out;
+    }
+
+    function pickMonitorSample(samples, c) {
+      if (c.monitorCh === 'mix') {
+        let sum = 0;
+        for (let i = 0; i < samples.length; i++) sum += samples[i];
+        return sum / samples.length;
+      }
+      return samples[Number(c.monitorCh)] ?? 0;
+    }
+
+    function pushPlaySample(sample) {
+      if (!playbackEnabled) return;
+      if (playCount >= PLAY_RING_SIZE) {
+        playR = (playR + 1) % PLAY_RING_SIZE;
+        playCount--;
+      }
+      playRing[playW] = sample;
+      playW = (playW + 1) % PLAY_RING_SIZE;
+      playCount++;
+    }
+
+    function resetPlayRing() {
+      playW = 0;
+      playR = 0;
+      playCount = 0;
+      playPhase = 0;
+    }
+
+    function scheduleDrawWaveform() {
+      waveDirty = true;
+      if (drawPending) return;
+      drawPending = true;
+      requestAnimationFrame(() => {
+        drawPending = false;
+        if (waveDirty) {
+          waveDirty = false;
+          drawWaveform();
+        }
+      });
+    }
+
+    function drawWaveform() {
+      const c = cfg();
+      if (waveCanvases.length !== c.channels) {
+        initWaveTracks();
+        return;
+      }
+
+      clampView();
+      updateViewInfo();
+
+      const start = Math.floor(viewOffset);
+      const end = Math.min(histLen, start + Math.ceil(viewSpan));
+      const span = Math.max(1, end - start);
+
+      for (let ch = 0; ch < waveCanvases.length; ch++) {
+        const canvas = waveCanvases[ch];
+        const ctx = canvas.getContext('2d');
+        const w = canvas.width;
+        const h = canvas.height;
+        const mid = h / 2;
+
+        ctx.fillStyle = '#d8dce8';
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#9ca3af';
+        ctx.beginPath();
+        ctx.moveTo(0, mid);
+        ctx.lineTo(w, mid);
+        ctx.stroke();
+
+        if (span <= 0) continue;
+
+        ctx.strokeStyle = '#2f5ea8';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let px = 0; px < w; px++) {
+          const s0 = start + Math.floor(px * span / w);
+          const s1 = start + Math.floor((px + 1) * span / w);
+          let min = 0;
+          let max = 0;
+          for (let s = s0; s < s1 && s < end; s++) {
+            const v = histSample(ch, s);
+            min = Math.min(min, v);
+            max = Math.max(max, v);
+          }
+          const yTop = mid - max * mid * 0.95;
+          const yBot = mid - min * mid * 0.95;
+          if (px === 0) {
+            ctx.moveTo(px, yTop);
+          } else {
+            ctx.lineTo(px, yTop);
+          }
+          ctx.lineTo(px, yBot);
+        }
+        ctx.stroke();
+      }
+
+      const state = streamPaused ? 'paused' : (followLive ? 'live' : 'review');
+      els.waveInfo.textContent = `${c.sampleRate} Hz · ${c.channels} ch · ${c.bits}-bit · ${state} · monitor ${c.monitorCh}`;
+    }
+
+    function processPcmBytes(chunk) {
+      const c = cfg();
+      const fb = frameBytes();
+      if (!chunk || !chunk.length || fb <= 0) return;
+
+      if (!streamPaused) {
+        totalBytes += chunk.length;
+        recordedChunks.push(chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk));
+        updateStats();
+      }
+
+      const alignedLen = chunk.length - (chunk.length % fb);
+      const view = new DataView(chunk.buffer, chunk.byteOffset, alignedLen);
+
+      let peak = 0;
+      let sumSq = 0;
+      let count = 0;
+
+      for (let off = 0; off < alignedLen; off += fb) {
+        const samples = deinterleaveFrame(view, off, c);
+        const s = pickMonitorSample(samples, c);
+        const abs = Math.abs(s);
+        if (abs > peak) peak = abs;
+        sumSq += s * s;
+        count++;
+        if (!streamPaused) {
+          pushHistory(samples);
+        }
+        pushPlaySample(s);
+      }
+
+      els.peakVal.textContent = String(Math.round(peak * 32767));
+      els.rmsVal.textContent = String(Math.round(Math.sqrt(sumSq / Math.max(count, 1)) * 32767));
+      els.meterFill.style.width = Math.min(100, peak * 100).toFixed(1) + '%';
+      if (!streamPaused) {
+        scheduleDrawWaveform();
+      }
+    }
+
+    function b64ToBytes(b64) {
+      const bin = atob(b64);
+      const out = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+      return out;
+    }
+
+    async function refreshPorts() {
+      await detectHttpBridge();
+      setupPortUi();
+
+      const select = els.portSelect;
+      const prev = select.value;
+      select.innerHTML = '';
+
+      if (useNativeBridge()) {
+        const ports = await api().list_ports();
+        if (!ports.length) {
+          select.innerHTML = '<option value="">未找到串口（检查 USB 连接）</option>';
+          return;
+        }
+        for (const p of ports) {
+          const opt = document.createElement('option');
+          opt.value = p.device;
+          opt.textContent = p.label;
+          select.appendChild(opt);
+        }
+      } else if (httpBridge) {
+        try {
+          const res = await fetch('/api/ports', { cache: 'no-store' });
+          const json = await res.json();
+          const ports = json.ports || [];
+          if (!ports.length) {
+            select.innerHTML = '<option value="">未找到 COM 口 - Manual COM 填 COM23</option>';
+            return;
+          }
+          for (const p of ports) {
+            const opt = document.createElement('option');
+            opt.value = p.device;
+            opt.textContent = p.label;
+            select.appendChild(opt);
+          }
+        } catch (err) {
+          select.innerHTML = '<option value="">桥接错误 - 重启 start_monitor.bat</option>';
+        }
+      } else if ('serial' in navigator) {
+        const ports = await navigator.serial.getPorts();
+        if (!ports.length) {
+          select.innerHTML = '<option value="">点「连接 COM 口」在弹窗中选择</option>';
+          return;
+        }
+        ports.forEach((port, idx) => {
+          const opt = document.createElement('option');
+          opt.value = String(idx);
+          opt.textContent = `Authorized port #${idx + 1}`;
+          opt._port = port;
+          select.appendChild(opt);
+        });
+      } else {
+        select.innerHTML = '<option value="">当前浏览器不支持串口</option>';
+      }
+
+      if (prev) select.value = prev;
+    }
+
+    async function bridgePollLoop() {
+      if (!connected) return;
+      try {
+        let b64 = null;
+        if (useNativeBridge()) {
+          b64 = await api().read(4096);
+        } else {
+          const res = await fetch('/api/read', { cache: 'no-store' });
+          const json = await res.json();
+          b64 = json.data;
+        }
+        if (b64) processPcmBytes(b64ToBytes(b64));
+      } catch (err) {
+        console.error(err);
+        setStatus('Read error');
+        await disconnectSerial();
+        return;
+      }
+      pollTimer = setTimeout(bridgePollLoop, 5);
+    }
+
+    async function webSerialReadLoop() {
+      while (webSerialPort && webSerialPort.readable) {
+        webSerialReader = webSerialPort.readable.getReader();
+        try {
+          while (true) {
+            const { value, done } = await webSerialReader.read();
+            if (done) break;
+            if (value?.length) processPcmBytes(value);
+          }
+        } catch (err) {
+          console.error(err);
+          setStatus('Read error: ' + err.message);
+          break;
+        } finally {
+          webSerialReader.releaseLock();
+          webSerialReader = null;
+        }
+      }
+    }
+
+    async function ensureAudio() {
+      if (!audioCtx) {
+        audioCtx = new AudioContext();
+        gainNode = audioCtx.createGain();
+        gainNode.gain.value = 2.0;
+        scriptNode = audioCtx.createScriptProcessor(2048, 0, 1);
+        scriptNode.onaudioprocess = (event) => {
+          if (!playbackEnabled) return;
+          const out = event.outputBuffer.getChannelData(0);
+          const inRate = cfg().sampleRate;
+          const outRate = audioCtx.sampleRate;
+          for (let i = 0; i < out.length; i++) {
+            if (playCount > 0) {
+              const s0 = playRing[playR];
+              const s1 = playCount > 1 ? playRing[(playR + 1) % PLAY_RING_SIZE] : s0;
+              out[i] = s0 + (s1 - s0) * playPhase;
+              playPhase += inRate / outRate;
+              while (playPhase >= 1 && playCount > 0) {
+                playPhase -= 1;
+                playR = (playR + 1) % PLAY_RING_SIZE;
+                playCount--;
+              }
+            } else {
+              out[i] = 0;
+              playPhase = 0;
+            }
+          }
+        };
+        scriptNode.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+      }
+      if (audioCtx.state === 'suspended') {
+        await audioCtx.resume();
+      }
+    }
+
+    async function connectSerial() {
+      if (useBridgeApi()) {
+        const port = selectedPortName();
+        if (!port) {
+          alert('Select COM port from dropdown, or type COM3 in Manual COM box.\nAlso run list_ports.bat to check Device Manager.');
+          return;
+        }
+        const baud = Number(els.baudRate.value) || 115200;
+        let ret;
+        if (useNativeBridge()) {
+          ret = await api().connect(port, baud);
+        } else {
+          const res = await fetch('/api/connect', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ port, baudrate: baud }),
+          });
+          ret = await res.json();
+        }
+        if (!ret.ok) {
+          alert(ret.message || '连接失败（端口可能被 idf.py monitor 占用，请先关闭）');
+          return;
+        }
+        setConnected(true);
+        setStatus(ret.message);
+        bridgePollLoop();
+        return;
+      }
+
+      if (location.protocol === 'file:') {
+        alert('不能直接双击 HTML 打开。\n请关闭本页，双击 start_monitor.bat 后再连接 COM 口。');
+        return;
+      }
+
+      if (!('serial' in navigator)) {
+        alert('请使用 Chrome 或 Edge，并通过 start_monitor.bat 打开本页（Web Serial 需要 http://127.0.0.1）。');
+        return;
+      }
+
+      try {
+        const opt = els.portSelect.selectedOptions[0];
+        if (opt && opt._port) {
+          webSerialPort = opt._port;
+        } else {
+          webSerialPort = await navigator.serial.requestPort({ filters: [] });
+          await refreshPorts();
+        }
+        await webSerialPort.open({ baudRate: Number(els.baudRate.value) || 115200 });
+        webSerialWriter = webSerialPort.writable.getWriter();
+        setConnected(true);
+        setStatus('Connected');
+        webSerialReadLoop();
+      } catch (err) {
+        console.error(err);
+        setStatus('Connect failed');
+      }
+    }
+
+    async function disconnectSerial() {
+      playbackEnabled = false;
+      els.playBtn.textContent = '开启实时播放';
+      resetPlayRing();
+      if (scriptNode) scriptNode.disconnect();
+      if (gainNode) gainNode.disconnect();
+      if (audioCtx) await audioCtx.close().catch(() => {});
+      audioCtx = null;
+      scriptNode = null;
+      gainNode = null;
+
+      if (pollTimer) {
+        clearTimeout(pollTimer);
+        pollTimer = null;
+      }
+
+      if (useNativeBridge()) {
+        await api().disconnect();
+      } else if (httpBridge) {
+        await fetch('/api/disconnect', { method: 'POST' });
+      } else {
+        if (webSerialReader) await webSerialReader.cancel().catch(() => {});
+        if (webSerialWriter) {
+          await webSerialWriter.close().catch(() => {});
+          webSerialWriter = null;
+        }
+        if (webSerialPort) await webSerialPort.close().catch(() => {});
+        webSerialPort = null;
+      }
+
+      setConnected(false);
+      setStatus('Disconnected');
+    }
+
+    function buildWav() {
+      const c = cfg();
+      const pcm = new Uint8Array(totalBytes);
+      let offset = 0;
+      for (const part of recordedChunks) {
+        pcm.set(part, offset);
+        offset += part.length;
+      }
+
+      const header = new ArrayBuffer(44);
+      const view = new DataView(header);
+      const blockAlign = c.channels * (c.bits / 8);
+      const byteRate = c.sampleRate * blockAlign;
+      const writeStr = (o, s) => { for (let i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i)); };
+
+      writeStr(0, 'RIFF');
+      view.setUint32(4, 36 + pcm.length, true);
+      writeStr(8, 'WAVE');
+      writeStr(12, 'fmt ');
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, c.channels, true);
+      view.setUint32(24, c.sampleRate, true);
+      view.setUint32(28, byteRate, true);
+      view.setUint16(32, blockAlign, true);
+      view.setUint16(34, c.bits, true);
+      writeStr(36, 'data');
+      view.setUint32(40, pcm.length, true);
+      return new Blob([header, pcm], { type: 'audio/wav' });
+    }
+
+    function saveWav() {
+      if (!totalBytes) return;
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(buildWav());
+      a.download = `record_${cfg().channels}ch_${cfg().sampleRate}.wav`;
+      a.click();
+    }
+
+    function clearBuffer() {
+      totalBytes = 0;
+      recordedChunks = [];
+      resetPlayRing();
+      resetHistory();
+      updateStats();
+      drawWaveform();
+      els.peakVal.textContent = '0';
+      els.rmsVal.textContent = '0';
+      els.meterFill.style.width = '0%';
+    }
+
+    function zoomWave(factor, anchorRatio) {
+      const center = viewOffset + viewSpan * anchorRatio;
+      viewSpan = Math.min(Math.max(viewSpan * factor, 128), Math.max(128, histLen || cfg().sampleRate * 30));
+      viewOffset = center - viewSpan * anchorRatio;
+      followLive = false;
+      clampView();
+      drawWaveform();
+    }
+
+    function panWave(deltaSamples) {
+      viewOffset += deltaSamples;
+      followLive = false;
+      clampView();
+      drawWaveform();
+    }
+
+    els.refreshBtn.addEventListener('click', refreshPorts);
+    els.connectBtn.addEventListener('click', connectSerial);
+    els.disconnectBtn.addEventListener('click', disconnectSerial);
+    if (els.devPlayVol) {
+      els.devPlayVol.addEventListener('input', syncPlayVolFromSlider);
+    }
+    if (els.devPlayVolNum) {
+      els.devPlayVolNum.addEventListener('change', syncPlayVolFromNumber);
+    }
+    if (els.applyDevCtrlBtn) {
+      els.applyDevCtrlBtn.addEventListener('click', applyDeviceControls);
+    }
+    els.pauseBtn.addEventListener('click', () => {
+      streamPaused = !streamPaused;
+      els.pauseBtn.textContent = streamPaused ? '继续' : '暂停';
+      setStatus(streamPaused ? 'Paused (waveform frozen)' : 'Connected');
+      if (!streamPaused) {
+        followLive = true;
+        viewSpan = cfg().sampleRate * cfg().waveWindowSec;
+        viewOffset = Math.max(0, histLen - viewSpan);
+        drawWaveform();
+      }
+    });
+    els.followBtn.addEventListener('click', () => {
+      followLive = true;
+      viewSpan = cfg().sampleRate * cfg().waveWindowSec;
+      viewOffset = Math.max(0, histLen - viewSpan);
+      drawWaveform();
+    });
+    els.playBtn.addEventListener('click', async () => {
+      if (!playbackEnabled) {
+        try {
+          await ensureAudio();
+          resetPlayRing();
+          playbackEnabled = true;
+          els.playBtn.textContent = '关闭实时播放';
+        } catch (err) {
+          console.error(err);
+          alert('无法启动音频输出，请检查浏览器是否允许播放声音。');
+        }
+      } else {
+        playbackEnabled = false;
+        els.playBtn.textContent = '开启实时播放';
+        resetPlayRing();
+      }
+    });
+    els.saveBtn.addEventListener('click', saveWav);
+    els.clearBtn.addEventListener('click', clearBuffer);
+
+    els.wavePanel.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const rect = els.wavePanel.getBoundingClientRect();
+      const anchorRatio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+      if (e.shiftKey) {
+        panWave((e.deltaY + e.deltaX) * viewSpan * 0.0015);
+        return;
+      }
+      const factor = e.deltaY > 0 ? 1.15 : 1 / 1.15;
+      zoomWave(factor, anchorRatio);
+    }, { passive: false });
+
+    ['sampleRate', 'channels', 'bits', 'monitorCh', 'endian', 'waveWindow'].forEach((id) => {
+      document.getElementById(id).addEventListener('change', () => {
+        if (id === 'sampleRate') {
+          normalizeSampleRateInput();
+        }
+        if (id === 'channels') {
+          refreshMonitorChOptions();
+          initWaveTracks();
+          buildMicGainControls();
+        } else if (id === 'waveWindow') {
+          viewSpan = cfg().sampleRate * cfg().waveWindowSec;
+          if (followLive) {
+            viewOffset = Math.max(0, histLen - viewSpan);
+          }
+          drawWaveform();
+        } else if (id === 'sampleRate') {
+          drawWaveform();
+        } else {
+          drawWaveform();
+        }
+        updateStats();
+      });
+    });
+
+    window.addEventListener('pywebviewready', () => {
+      els.modeHint.textContent = '可选 Native 模式（python3 pcm_serial_monitor.py）：下拉直接列出串口。';
+      refreshPorts();
+    });
+
+    (async () => {
+      try {
+        normalizeSampleRateInput();
+        await detectHttpBridge();
+        setupPortUi();
+        refreshMonitorChOptions();
+        initWaveTracks();
+        buildMicGainControls();
+        if (useNativeBridge()) {
+          els.modeHint.textContent = 'Native 模式：下拉选择 CDC 串口。';
+        }
+        await refreshPorts();
+      } catch (err) {
+        console.error('Init failed:', err);
+        els.modeHint.textContent = '页面初始化失败，请刷新或重启 start_monitor.bat';
+      }
+    })();
+  </script>
+</body>
+</html>

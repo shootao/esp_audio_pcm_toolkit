@@ -1,0 +1,53 @@
+menu "ESP Audio PCM Toolkit"
+
+    choice ESP_AUDIO_PCM_TRANSPORT
+        prompt "PCM stream transport"
+        default ESP_AUDIO_PCM_TRANSPORT_USB
+        help
+            Select the transport used for PCM streaming and remote control commands.
+
+        config ESP_AUDIO_PCM_TRANSPORT_USB
+            bool "USB Serial/JTAG"
+        config ESP_AUDIO_PCM_TRANSPORT_UART
+            bool "UART"
+        config ESP_AUDIO_PCM_TRANSPORT_TCP
+            bool "TCP (reserved)"
+        config ESP_AUDIO_PCM_TRANSPORT_UDP
+            bool "UDP (reserved)"
+    endchoice
+
+    config ESP_AUDIO_PCM_USB_RX_BUF_SIZE
+        int "USB RX buffer size"
+        default 256
+        depends on ESP_AUDIO_PCM_TRANSPORT_USB
+
+    config ESP_AUDIO_PCM_USB_TX_BUF_SIZE
+        int "USB TX buffer size"
+        default 4096
+        depends on ESP_AUDIO_PCM_TRANSPORT_USB
+
+    config ESP_AUDIO_PCM_UART_PORT
+        int "UART port number"
+        default 1
+
+    config ESP_AUDIO_PCM_UART_TX_PIN
+        int "UART TX GPIO"
+        default 17
+
+    config ESP_AUDIO_PCM_UART_RX_PIN
+        int "UART RX GPIO"
+        default 18
+
+    config ESP_AUDIO_PCM_UART_BAUD
+        int "UART baud rate"
+        default 921600
+
+    config ESP_AUDIO_PCM_UART_RX_BUF_SIZE
+        int "UART RX buffer size"
+        default 256
+
+    config ESP_AUDIO_PCM_UART_TX_BUF_SIZE
+        int "UART TX buffer size"
+        default 4096
+
+endmenu
