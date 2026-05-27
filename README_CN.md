@@ -77,6 +77,8 @@ Windows：双击 `tools/pcm_monitor/start_monitor.bat`。
 | Serial (USB/UART) | 打开 COM 口 | **连接 COM 口** |
 | TCP / UDP | 监听 `0.0.0.0:端口` | **启动 TCP/UDP Server**，等待设备连入 |
 
+网页 **设备控制** 区：调整音量/增益后须点 **Apply to device** 才会下发（滑条本身不会自动发送）。
+
 ## 示例
 
 [`examples/basic_example/`](./examples/basic_example/) — Hi Nomi BSP + `esp_codec_dev` 录音，PCM 推流与远程控制。

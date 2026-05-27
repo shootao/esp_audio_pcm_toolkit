@@ -205,6 +205,19 @@
       border-color: #cbd5e1;
     }
 
+    button.btn-apply {
+      background: var(--esp-red);
+      color: #fff;
+      border: 1px solid var(--esp-red-dark);
+      font-weight: 600;
+      box-shadow: 0 1px 2px rgba(231, 53, 44, 0.25);
+    }
+
+    button.btn-apply:hover:not(:disabled) {
+      background: var(--esp-red-dark);
+      border-color: #a82820;
+    }
+
     button.danger {
       background: #fff;
       color: #b45309;
@@ -552,7 +565,7 @@
 
     <div class="panel" id="devCtrlPanel">
       <h2 class="panel-title">设备控制</h2>
-      <p class="ctrl-hint">连接 USB COM 口后下发命令（<code>vol</code> / <code>gch</code>），设备不在 USB 上回显，避免污染 PCM。</p>
+      <p class="ctrl-hint">连接后调整音量/增益，须点下方红色 <strong>Apply to device</strong> 才会下发（滑条不会自动发送）。</p>
       <label class="ctrl-row">
         播放音量
         <div class="ctrl-inline">
@@ -563,7 +576,7 @@
       </label>
       <div id="micGainControls" class="mic-gain-grid"></div>
       <div class="btn-row">
-        <button id="applyDevCtrlBtn" class="secondary" disabled>Apply to device</button>
+        <button id="applyDevCtrlBtn" class="btn-apply" disabled>Apply to device</button>
       </div>
     </div>
 
@@ -728,7 +741,7 @@
     const DEFAULT_MIC_GAIN_DB = 30;
     const MIC_GAIN_DB_MAX = 36.5;
     const LS_PC_IP_MANUAL = 'pcm_monitor_pc_ip_manual';
-    const PAGE_BUILD = '20250520-serial-tcp-udp2';
+    const PAGE_BUILD = '2026 · v0.2.0';
 
     if (!document.getElementById('transportMode')) {
       alert(
@@ -742,7 +755,7 @@
     } else {
       const verEl = document.getElementById('pageVersion');
       if (verEl) {
-        verEl.textContent = `(build ${PAGE_BUILD})`;
+        verEl.textContent = PAGE_BUILD;
       }
     }
 
@@ -1891,7 +1904,7 @@
               const ver = await res.json();
               const verEl = document.getElementById('pageVersion');
               if (verEl && ver.html_version) {
-                verEl.textContent = `(build ${PAGE_BUILD}, srv ${ver.html_version})`;
+                verEl.textContent = `${PAGE_BUILD} · srv ${ver.html_version}`;
               }
             }
           } catch {

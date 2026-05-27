@@ -77,6 +77,8 @@ Windows: double-click `tools/pcm_monitor/start_monitor.bat`.
 | Serial (USB/UART) | Opens COM port | **Connect COM** |
 | TCP / UDP | Listens on `0.0.0.0:port` | **Start TCP/UDP Server** — device connects in |
 
+In the web **Device control** panel, adjust volume/gain then click **Apply to device** to send commands (sliders do not auto-apply).
+
 ## Example
 
 [`examples/basic_example/`](./examples/basic_example/) — Hi Nomi BSP + `esp_codec_dev` record, PCM stream, remote control.
