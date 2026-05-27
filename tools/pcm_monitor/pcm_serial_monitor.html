@@ -3,7 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Espressif USB Audio Monitor</title>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <title>Audio PCM Monitor</title>
   <style>
     :root {
       --esp-red: #e7352c;
@@ -63,6 +66,13 @@
       font-weight: 600;
       color: var(--text);
       letter-spacing: -0.02em;
+    }
+
+    .page-version {
+      font-size: 0.72rem;
+      font-weight: 500;
+      color: var(--muted);
+      margin-left: 6px;
     }
 
     .header-sub {
@@ -146,6 +156,14 @@
       grid-template-columns: 1fr 120px auto auto;
       gap: 12px;
       align-items: end;
+    }
+
+    #serialPortPanel[hidden] {
+      display: none !important;
+    }
+
+    #localIpWrap[hidden] {
+      display: none !important;
     }
 
     /* ── Buttons ── */
@@ -412,6 +430,50 @@
       width: 72px;
     }
 
+    .local-ip-panel {
+      margin-bottom: 12px;
+      padding: 12px 14px;
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    .local-ip-title {
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .local-ip-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .local-ip-panel input[type="text"] {
+      width: 100%;
+    }
+
+    .local-ip-note {
+      margin-top: 8px;
+      font-size: 0.76rem;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .network-server-hint {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px dashed var(--border);
+    }
+
+    .network-server-hint strong {
+      color: var(--text);
+    }
+
     @media (max-width: 640px) {
       .port-row { grid-template-columns: 1fr 1fr; }
       .site-header { padding: 12px 16px; }
@@ -425,9 +487,9 @@
       <img src="espressif-logo.svg" alt="Espressif Systems" class="brand-logo" />
     </a>
     <div class="header-main">
-      <h1>USB Audio Monitor</h1>
+      <h1>Audio PCM Monitor <span id="pageVersion" class="page-version"></span></h1>
       <p class="header-sub" id="modeHint">
-        双击 <code>start_monitor.bat</code> 启动 · 选择 COM 口后点「连接」
+        双击 <code>start_monitor.bat</code> 启动 · 选择传输方式后连接
       </p>
     </div>
   </header>
@@ -443,20 +505,47 @@
     </div>
 
     <div class="panel">
-      <h2 class="panel-title">串口连接</h2>
-      <div class="port-row" id="portRow">
-        <label id="portSelectWrap">Serial Port (CDC)
-          <select id="portSelect"><option value="">-- refresh ports --</option></select>
+      <h2 class="panel-title">连接</h2>
+      <div class="grid" style="margin-bottom:12px">
+        <label>传输方式
+          <select id="transportMode">
+            <option value="serial">Serial (USB/UART)</option>
+            <option value="tcp">TCP (设备 → PC Server)</option>
+            <option value="udp">UDP (设备 → PC Server)</option>
+          </select>
         </label>
-        <label id="manualPortWrap">Manual COM
-          <input id="manualPort" type="text" placeholder="COM23" />
+        <label id="networkPortWrap" hidden>PCM 监听端口
+          <input id="networkPort" type="number" value="8766" min="1024" max="65535" step="1" />
         </label>
-        <label>Baud
-          <input id="baudRate" type="number" value="115200" min="9600" max="3000000" step="1" />
-        </label>
-        <button id="refreshBtn" class="secondary">Refresh</button>
-        <div id="portHint" class="port-hint" hidden style="grid-column:1/-1">
-          Web Serial mode: click Connect COM Port, pick USB Serial/JTAG in Chrome popup.
+      </div>
+      <div id="localIpWrap" class="local-ip-panel" hidden>
+        <div class="local-ip-title">PC 本机 IP（填到设备 menuconfig → Server IP）</div>
+        <div class="local-ip-row">
+          <select id="localIpSelect"><option value="">— 刷新获取网卡列表 —</option></select>
+          <button id="refreshIpBtn" class="secondary" type="button">Refresh IP</button>
+        </div>
+        <input id="localIpManual" type="text" placeholder="手动覆盖，如 192.168.1.105（留空则使用上方列表）" />
+        <div class="local-ip-note">★ 为系统推荐（默认路由）；多网卡时请选与 ESP 同网段的那个</div>
+        <div id="networkServerHint" class="local-ip-note network-server-hint" hidden>
+          <strong>TCP：</strong>「停止 Server」会断开连接；再次「启动 Server」后，设备会在下次发送 PCM 时<strong>自动重连</strong>（一般无需重启）。<br>
+          <strong>UDP：</strong>「停止 Server」后再启动，设备<strong>无需重启</strong>，继续发包即可。
+        </div>
+      </div>
+      <div id="serialPortPanel">
+        <div class="port-row" id="portRow">
+          <label id="portSelectWrap">Serial Port (CDC)
+            <select id="portSelect"><option value="">-- refresh ports --</option></select>
+          </label>
+          <label id="manualPortWrap">Manual COM
+            <input id="manualPort" type="text" placeholder="COM23" />
+          </label>
+          <label id="baudWrap">Baud
+            <input id="baudRate" type="number" value="115200" min="9600" max="3000000" step="1" />
+          </label>
+          <button id="refreshBtn" class="secondary">Refresh</button>
+          <div id="portHint" class="port-hint" hidden style="grid-column:1/-1">
+            Web Serial mode: click Connect COM Port, pick USB Serial/JTAG in Chrome popup.
+          </div>
         </div>
       </div>
     </div>
@@ -526,7 +615,7 @@
 
       <div class="btn-row">
         <button id="connectBtn">连接 COM 口</button>
-        <button id="disconnectBtn" class="secondary" disabled>Disconnect</button>
+        <button id="disconnectBtn" class="secondary" disabled>断开</button>
         <button id="pauseBtn" class="secondary" disabled>暂停</button>
         <button id="playBtn" disabled>开启实时播放</button>
         <button id="saveBtn" class="secondary" disabled>Save WAV</button>
@@ -559,6 +648,7 @@
 
       <div class="hint-box">
         <strong>PCM 格式：</strong>多通道交错（Ch0, Ch1, … 按采样点排列），参数须与固件一致<br>
+        <strong>网络模式：</strong>PC 作 Server，设备作 Client；menuconfig 填 PC IP + 端口（与上方监听端口一致）<br>
         <strong>增益命令：</strong><code>gch 0 30</code> = Ch0，与下方滑条 <code>data-ch</code> 一致（0 起）<br>
         <strong>波形操作：</strong>滚轮缩放 · Shift+滚轮平移 · 「跟随最新」回实时末尾<br>
         <strong>注意：</strong>USB 口应只发 PCM；Log/Console 请走其它串口，避免污染波形
@@ -586,6 +676,17 @@
     const els = {
       fileWarn: document.getElementById('fileWarn'),
       bridgeWarn: document.getElementById('bridgeWarn'),
+      transportMode: document.getElementById('transportMode'),
+      networkPortWrap: document.getElementById('networkPortWrap'),
+      networkPort: document.getElementById('networkPort'),
+      localIpWrap: document.getElementById('localIpWrap'),
+      localIpSelect: document.getElementById('localIpSelect'),
+      localIpManual: document.getElementById('localIpManual'),
+      refreshIpBtn: document.getElementById('refreshIpBtn'),
+      networkServerHint: document.getElementById('networkServerHint'),
+      connectBtn: document.getElementById('connectBtn'),
+      disconnectBtn: document.getElementById('disconnectBtn'),
+      serialPortPanel: document.getElementById('serialPortPanel'),
       portRow: document.getElementById('portRow'),
       portSelectWrap: document.getElementById('portSelectWrap'),
       manualPortWrap: document.getElementById('manualPortWrap'),
@@ -601,8 +702,6 @@
       monitorCh: document.getElementById('monitorCh'),
       endian: document.getElementById('endian'),
       waveWindow: document.getElementById('waveWindow'),
-      connectBtn: document.getElementById('connectBtn'),
-      disconnectBtn: document.getElementById('disconnectBtn'),
       pauseBtn: document.getElementById('pauseBtn'),
       playBtn: document.getElementById('playBtn'),
       saveBtn: document.getElementById('saveBtn'),
@@ -628,6 +727,87 @@
     const DEFAULT_PLAY_VOL = 70;
     const DEFAULT_MIC_GAIN_DB = 30;
     const MIC_GAIN_DB_MAX = 36.5;
+    const LS_PC_IP_MANUAL = 'pcm_monitor_pc_ip_manual';
+    const PAGE_BUILD = '20250520-serial-tcp-udp2';
+
+    if (!document.getElementById('transportMode')) {
+      alert(
+        '当前页面是旧版本（没有 TCP/UDP）。\n\n'
+        + '请按顺序操作：\n'
+        + '1. 关闭浏览器本页\n'
+        + '2. 关闭标题为 "PCM Monitor" 的黑窗口\n'
+        + '3. 重新双击 start_monitor.bat\n'
+        + '4. 用黑窗口里带 ?v= 的新 URL 打开'
+      );
+    } else {
+      const verEl = document.getElementById('pageVersion');
+      if (verEl) {
+        verEl.textContent = `(build ${PAGE_BUILD})`;
+      }
+    }
+
+    function getSelectedPcIp() {
+      const manual = (els.localIpManual?.value || '').trim();
+      if (manual) {
+        return manual;
+      }
+      const selected = (els.localIpSelect?.value || '').trim();
+      if (selected) {
+        return selected;
+      }
+      return bridgeLocalIp || '127.0.0.1';
+    }
+
+    function populateIpSelect(addresses, primary) {
+      if (!els.localIpSelect) {
+        return;
+      }
+      const prev = getSelectedPcIp();
+      els.localIpSelect.innerHTML = '';
+
+      if (!addresses?.length) {
+        const opt = document.createElement('option');
+        opt.value = primary || '';
+        opt.textContent = primary ? `${primary} (routed guess)` : '未检测到网卡 IP';
+        els.localIpSelect.appendChild(opt);
+        bridgeLocalIp = primary || bridgeLocalIp;
+        return;
+      }
+
+      for (const item of addresses) {
+        const opt = document.createElement('option');
+        opt.value = item.ip;
+        const star = item.primary ? ' ★' : '';
+        opt.textContent = `${item.ip}  (${item.name})${star}`;
+        els.localIpSelect.appendChild(opt);
+      }
+
+      const values = new Set(addresses.map((item) => item.ip));
+      if (prev && values.has(prev)) {
+        els.localIpSelect.value = prev;
+      } else if (primary && values.has(primary)) {
+        els.localIpSelect.value = primary;
+      } else {
+        els.localIpSelect.selectedIndex = 0;
+      }
+      bridgeLocalIp = getSelectedPcIp();
+    }
+
+    async function refreshLocalIps() {
+      if (!httpBridge) {
+        return;
+      }
+      try {
+        const res = await fetch('/api/ifaces', { cache: 'no-store' });
+        if (!res.ok) {
+          return;
+        }
+        const json = await res.json();
+        populateIpSelect(json.addresses || json.local_ips || [], json.primary || json.local_ip || '');
+      } catch (err) {
+        console.error('refreshLocalIps failed', err);
+      }
+    }
 
     const useNativeBridge = () => typeof window.pywebview !== 'undefined' && window.pywebview.api;
     const useBridgeApi = () => useNativeBridge() || httpBridge;
@@ -635,6 +815,18 @@
     const api = () => window.pywebview?.api;
 
     let httpBridge = false;
+    let bridgeLocalIp = '127.0.0.1';
+    let networkWaiting = false;
+    let statusPollTimer = null;
+
+    function transportMode() {
+      return els.transportMode?.value || 'serial';
+    }
+
+    function isNetworkMode() {
+      const m = transportMode();
+      return m === 'tcp' || m === 'udp';
+    }
 
     async function detectHttpBridge() {
       if (location.protocol !== 'http:') {
@@ -653,6 +845,7 @@
         }
         const json = await res.json();
         httpBridge = json.bridge === true;
+        populateIpSelect(json.local_ips || [], json.local_ip || '');
         return httpBridge;
       } catch {
         httpBridge = false;
@@ -667,6 +860,26 @@
     }
 
     function setupPortUi() {
+      const net = isNetworkMode();
+      const mode = transportMode();
+      if (els.networkPortWrap) els.networkPortWrap.hidden = !net;
+      if (els.localIpWrap) els.localIpWrap.hidden = !net;
+      if (els.networkServerHint) els.networkServerHint.hidden = !net;
+      if (els.serialPortPanel) els.serialPortPanel.hidden = net;
+      if (els.portRow && !net) {
+        els.portRow.style.gridTemplateColumns = '1fr 120px auto auto';
+      }
+
+      if (els.connectBtn) {
+        els.connectBtn.textContent = net
+          ? (mode === 'tcp' ? '启动 TCP Server' : '启动 UDP Server')
+          : '连接 COM 口';
+      }
+      if (els.disconnectBtn) {
+        els.disconnectBtn.textContent = net ? '停止 Server' : '断开';
+      }
+      if (els.portHint) els.portHint.hidden = true;
+
       if (els.fileWarn) {
         if (location.protocol === 'file:') {
           els.fileWarn.classList.add('show');
@@ -682,13 +895,11 @@
         }
       }
 
-      if (els.portSelectWrap) els.portSelectWrap.hidden = false;
-      if (els.manualPortWrap) els.manualPortWrap.hidden = false;
-      if (els.refreshBtn) els.refreshBtn.hidden = false;
-      if (els.portHint) els.portHint.hidden = true;
-      if (els.portRow) els.portRow.style.gridTemplateColumns = '1fr 120px auto auto';
-
-      if (useNativeBridge()) {
+      if (net) {
+        const pcIp = getSelectedPcIp();
+        const pcmPort = els.networkPort?.value || 8766;
+        els.modeHint.textContent = `网络模式：PC 监听 0.0.0.0:${pcmPort}；设备 menuconfig Server IP 填 ${pcIp}`;
+      } else if (useNativeBridge()) {
         els.modeHint.textContent = 'Native 模式：下拉选择 CDC 串口，或 Manual COM 填 COM23。';
       } else if (httpBridge) {
         els.modeHint.textContent = 'Python 桥接 OK：点 Refresh 列出 COM 口，或 Manual COM 填 COM23。';
@@ -901,6 +1112,11 @@
       if (els.clearBtn) els.clearBtn.disabled = !on;
       if (els.portSelect) els.portSelect.disabled = on;
       if (els.refreshBtn) els.refreshBtn.disabled = on;
+      if (els.transportMode) els.transportMode.disabled = on;
+      if (els.networkPort) els.networkPort.disabled = on;
+      if (els.localIpSelect) els.localIpSelect.disabled = on;
+      if (els.localIpManual) els.localIpManual.disabled = on;
+      if (els.refreshIpBtn) els.refreshIpBtn.disabled = on;
       if (els.devPlayVol) els.devPlayVol.disabled = !on;
       if (els.devPlayVolNum) els.devPlayVolNum.disabled = !on;
       if (els.applyDevCtrlBtn) els.applyDevCtrlBtn.disabled = !on;
@@ -1235,6 +1451,26 @@
       if (prev) select.value = prev;
     }
 
+    async function networkStatusPoll() {
+      if (!connected || !isNetworkMode() || !httpBridge) return;
+      try {
+        const res = await fetch('/api/status', { cache: 'no-store' });
+        const st = await res.json();
+        if (st.local_ips?.length) {
+          populateIpSelect(st.local_ips, st.local_ip || '');
+        }
+        if (st.client_connected) {
+          networkWaiting = false;
+          setStatus(st.message || `设备已连接 ${st.client_addr || ''}`);
+        } else if (networkWaiting) {
+          setStatus(st.message || 'Server 已启动，等待设备连接…');
+        }
+      } catch (err) {
+        console.error(err);
+      }
+      statusPollTimer = setTimeout(networkStatusPoll, 500);
+    }
+
     async function bridgePollLoop() {
       if (!connected) return;
       try {
@@ -1250,7 +1486,7 @@
       } catch (err) {
         console.error(err);
         setStatus('Read error');
-        await disconnectSerial();
+        await disconnectTransport();
         return;
       }
       pollTimer = setTimeout(bridgePollLoop, 5);
@@ -1312,8 +1548,39 @@
       }
     }
 
-    async function connectSerial() {
+    async function connectTransport() {
       if (useBridgeApi()) {
+        if (isNetworkMode()) {
+          if (!httpBridge) {
+            alert('网络模式需要 Python 桥接。请双击 start_monitor.bat 打开本页。');
+            return;
+          }
+          const pcmPort = Number(els.networkPort?.value) || 8766;
+          const mode = transportMode();
+          const res = await fetch('/api/connect', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode, port: pcmPort }),
+          });
+          const ret = await res.json();
+          if (!ret.ok) {
+            alert(ret.message || '启动 Server 失败');
+            return;
+          }
+          if (ret.local_ips?.length) {
+            populateIpSelect(ret.local_ips, ret.local_ip || '');
+          } else if (ret.local_ip) {
+            populateIpSelect([{ ip: ret.local_ip, name: 'server', primary: true }], ret.local_ip);
+          }
+          networkWaiting = true;
+          setConnected(true);
+          const pcIp = getSelectedPcIp();
+          setStatus(ret.message || `${mode.toUpperCase()} Server 已启动，等待设备连接 ${pcIp}:${pcmPort}…`);
+          bridgePollLoop();
+          networkStatusPoll();
+          return;
+        }
+
         const port = selectedPortName();
         if (!port) {
           alert('Select COM port from dropdown, or type COM3 in Manual COM box.\nAlso run list_ports.bat to check Device Manager.');
@@ -1327,7 +1594,7 @@
           const res = await fetch('/api/connect', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ port, baudrate: baud }),
+            body: JSON.stringify({ mode: 'serial', port, baudrate: baud }),
           });
           ret = await res.json();
         }
@@ -1338,6 +1605,11 @@
         setConnected(true);
         setStatus(ret.message);
         bridgePollLoop();
+        return;
+      }
+
+      if (isNetworkMode()) {
+        alert('TCP/UDP 模式请通过 start_monitor.bat 启动 Python 桥接，浏览器无法直接监听 TCP/UDP。');
         return;
       }
 
@@ -1370,7 +1642,7 @@
       }
     }
 
-    async function disconnectSerial() {
+    async function disconnectTransport() {
       playbackEnabled = false;
       els.playBtn.textContent = '开启实时播放';
       resetPlayRing();
@@ -1385,6 +1657,11 @@
         clearTimeout(pollTimer);
         pollTimer = null;
       }
+      if (statusPollTimer) {
+        clearTimeout(statusPollTimer);
+        statusPollTimer = null;
+      }
+      networkWaiting = false;
 
       if (useNativeBridge()) {
         await api().disconnect();
@@ -1401,7 +1678,7 @@
       }
 
       setConnected(false);
-      setStatus('Disconnected');
+      setStatus(isNetworkMode() ? 'Server 已停止' : 'Disconnected');
     }
 
     function buildWav() {
@@ -1472,8 +1749,39 @@
     }
 
     els.refreshBtn.addEventListener('click', refreshPorts);
-    els.connectBtn.addEventListener('click', connectSerial);
-    els.disconnectBtn.addEventListener('click', disconnectSerial);
+    els.connectBtn.addEventListener('click', connectTransport);
+    els.disconnectBtn.addEventListener('click', disconnectTransport);
+    if (els.transportMode) {
+      els.transportMode.addEventListener('change', async () => {
+        if (connected) {
+          await disconnectTransport();
+        }
+        setupPortUi();
+        if (isNetworkMode()) {
+          await refreshLocalIps();
+        }
+      });
+    }
+    if (els.localIpSelect) {
+      els.localIpSelect.addEventListener('change', () => {
+        bridgeLocalIp = getSelectedPcIp();
+        setupPortUi();
+      });
+    }
+    if (els.localIpManual) {
+      const savedManual = localStorage.getItem(LS_PC_IP_MANUAL);
+      if (savedManual) {
+        els.localIpManual.value = savedManual;
+      }
+      els.localIpManual.addEventListener('input', () => {
+        localStorage.setItem(LS_PC_IP_MANUAL, els.localIpManual.value);
+        bridgeLocalIp = getSelectedPcIp();
+        setupPortUi();
+      });
+    }
+    if (els.refreshIpBtn) {
+      els.refreshIpBtn.addEventListener('click', refreshLocalIps);
+    }
     if (els.devPlayVol) {
       els.devPlayVol.addEventListener('input', syncPlayVolFromSlider);
     }
@@ -1569,10 +1877,27 @@
         refreshMonitorChOptions();
         initWaveTracks();
         buildMicGainControls();
+        if (isNetworkMode()) {
+          await refreshLocalIps();
+        }
         if (useNativeBridge()) {
           els.modeHint.textContent = 'Native 模式：下拉选择 CDC 串口。';
         }
         await refreshPorts();
+        if (httpBridge) {
+          try {
+            const res = await fetch('/api/version', { cache: 'no-store' });
+            if (res.ok) {
+              const ver = await res.json();
+              const verEl = document.getElementById('pageVersion');
+              if (verEl && ver.html_version) {
+                verEl.textContent = `(build ${PAGE_BUILD}, srv ${ver.html_version})`;
+              }
+            }
+          } catch {
+            /* ignore */
+          }
+        }
       } catch (err) {
         console.error('Init failed:', err);
         els.modeHint.textContent = '页面初始化失败，请刷新或重启 start_monitor.bat';

@@ -2,33 +2,65 @@
 
 本目录为 **esp_audio_pcm_toolkit** 组件的 PC 端工具，与设备端 `esp_audio_pcm_*` API 配套使用。
 
-通过 USB Serial/JTAG（或 UART）接收 ESP 固件输出的 PCM 音频，在 PC 上显示波形、试听、保存 WAV，并下发 `vol` / `gain` / `gch` 控制命令。
+支持三种传输方式：
+
+| 方式 | 数据方向 | 网页操作 |
+|------|----------|----------|
+| **Serial (USB/UART)** | ESP → PC（CDC/UART） | 选 COM 口 → **连接 COM 口** |
+| **TCP** | ESP 连 PC Server，双向 | 选 TCP → **启动 TCP Server** |
+| **UDP** | ESP 发包到 PC，控制命令 UDP 回包 | 选 UDP → **启动 UDP Server** |
+
+通过上述链路接收 ESP 固件输出的 PCM，在 PC 上显示波形、试听、保存 WAV，并下发 `vol` / `gain` / `gch` 控制命令。
 
 ---
 
 ## 怎么用（Windows）
 
-**直接双击 `start_monitor.bat`**，浏览器会自动打开。选 COM 口（或填 `COM23`），点 **连接**。
+**直接双击 `start_monitor.bat`**，浏览器会自动打开（URL 带 `?v=` 防缓存）。
 
-> 不要直接双击 `.html` 文件。
+> 不要直接双击 `.html` 文件。更新 HTML 后请 **关闭旧的「PCM Monitor」黑窗口**，再重新运行 bat。
 
-使用前：烧好固件、关闭 `idf.py monitor`。
+### Serial（USB / UART）
 
-### ⚠️ 固件必须关闭所有 Log
+1. 传输方式选 **Serial (USB/UART)**
+2. 选 COM 口（或填 `COM23`）→ **连接 COM 口**
+3. 使用前：烧好固件、关闭 `idf.py monitor`
 
-USB 口传的是**纯 PCM 二进制**，任何日志文字混进去都会导致波形乱码、有杂音。
+### TCP / UDP（已验证）
 
-开始发 PCM **之前**，在固件里关闭全部日志：
+架构：**PC = Server，ESP = Client**（同一 WiFi / 局域网）。
+
+1. 传输方式选 **TCP** 或 **UDP**
+2. 确认 **PCM 监听端口**（默认 **8766**，须与设备 menuconfig 一致）
+3. 在 **PC 本机 IP** 列表中选与 ESP 同网段的地址（或手动覆盖）
+4. 点 **启动 TCP Server** / **启动 UDP Server**
+5. 设备 menuconfig：
+   - `ESP Audio PCM Toolkit → PCM stream transport` → TCP 或 UDP
+   - `PC monitor server IP` → 网页上显示的 PC IP
+   - 端口与网页一致
+   - （`hi_nomi_record_play`）`Hi Nomi Record Play → WiFi SSID / password`
+6. 设备上电连 WiFi 后自动推 PCM；状态栏显示「设备已连接」
+
+**停止 / 再开 Server**
+
+| 模式 | 设备是否要重启 |
+|------|----------------|
+| TCP | 一般 **不用**；下次发 PCM 会自动重连 |
+| UDP | **不用**；继续发包即可 |
+
+桥接黑窗口会打印本机 IP 列表；也可访问 `http://127.0.0.1:8765/api/version` 确认桥接版本（含 `modes: serial/tcp/udp`）。
+
+### ⚠️ Serial 模式：固件必须关闭所有 Log
+
+USB/UART 口传的是**纯 PCM 二进制**，任何日志文字混进去都会导致波形乱码。
+
+TCP/UDP 网络口不经过 USB CDC，Console/Log 可仍走 UART；但 **PCM 链路上仍不要打印 Log**。
+
+开始发 PCM **之前**（Serial 模式尤其重要）：
 
 ```c
 esp_log_level_set("*", ESP_LOG_NONE);
 ```
-
-同时注意：
-
-- **不要**在 PCM 发送任务里使用 `ESP_LOGx`、`printf`
-- Console 若也走 USB（`CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG`），必须先关 Log，或把 Console 改到 UART
-- Console 若与 PCM 走不同端口（例如 Console 在 UART、PCM 在 USB），仍建议录音期间关 Log，避免误输出到 PCM 口
 
 ---
 
@@ -74,15 +106,16 @@ Windows 下若 `python3` 不可用，可改为 `python` 或 `py -3`。
 
 ## 网页功能
 
+- **传输方式**：Serial / TCP / UDP（TCP/UDP 时隐藏 COM 口区域）
 - **波形**：多通道分轨显示，支持滚轮缩放、Shift+滚轮平移
 - **Wave Window**：控制可见时间窗口（1–8 秒）
 - **暂停**：冻结波形与录制缓冲
 - **开启实时播放**：浏览器内试听（16 kHz → 重采样到 ~48 kHz）
 - **Save WAV**：保存当前缓冲为 WAV
-- **设备控制**（连接 COM 口后）：
+- **设备控制**（连接后）：
   - **播放音量** 0–100（%）
-  - **Ch0 – Ch3** 增益滑条（与 `gch 0`…`gch 3` 对应；Channels 少于 4 时只显示对应路数）
-  - 点 **Apply to device** 下发到固件（走 USB RX，不在 USB 上回显）
+  - **Ch0 – Ch3** 增益滑条（与 `gch 0`…`gch 3` 对应）
+  - 点 **Apply to device** 下发到固件
 
 下发命令格式（与 UART Console 一致，若固件实现了对应命令）：
 
@@ -108,6 +141,13 @@ Windows 下若 `python3` 不可用，可改为 `python` 或 `py -3`。
 - 关闭浏览器标签页，重新运行 `start_monitor.bat`
 - 按 F12 查看 Console 是否有报错
 
+### 页面仍是旧版（没有 TCP/UDP 下拉框）
+
+1. 关闭浏览器标签页
+2. 关闭标题为 **PCM Monitor** 的 cmd 窗口
+3. 重新双击 **`start_monitor.bat`**
+4. 使用黑窗口里带 **`?v=`** 的 URL；标题应含 **Audio PCM Monitor**
+
 ### COM 口列表为空
 
 1. 运行 `list_ports.bat` 或 `python3 list_ports.py` 查看系统是否识别端口
@@ -120,6 +160,14 @@ Windows 下若 `python3` 不可用，可改为 `python` 或 `py -3`。
 - **最常见原因：固件 Log 没关干净**，检查是否已 `esp_log_level_set("*", ESP_LOG_NONE)`
 - 确认 PCM 和 Log/Console 没有共用同一个 USB CDC 口
 - 确认 Sample Rate 填 **16000**，不要填 115200
+
+### TCP/UDP：一直「等待设备连接」
+
+- PC 与 ESP 是否同一网段（PC IP 是否选对）
+- 设备 menuconfig **Server IP / 端口** 是否与网页一致
+- 设备 WiFi 是否已连接（串口 log 应有 `got ip`）
+- PC 防火墙是否放行入站 **8766**（或你设的端口）
+- 先点网页 **启动 Server**，再让设备 `esp_audio_pcm_open()`
 
 ### 端口被占用（WinError 10013）
 
@@ -142,14 +190,30 @@ Windows 下若 `python3` 不可用，可改为 `python` 或 `py -3`。
 
 ## 固件侧参考
 
-PC monitor 接收的是 ESP 发出的**原始 PCM 字节流**。固件侧常见两种输出方式：
+推荐使用本组件 **`esp_audio_pcm_*` API**（`esp_audio_pcm_config_default()` 跟随 menuconfig 选传输方式）。
 
-| 方式 | 驱动 | 典型场景 |
+| 方式 | 底层 | 典型场景 |
 |------|------|----------|
-| **USB Serial/JTAG** | `esp_driver_usb_serial_jtag` | 带 USB 直连的 ESP 芯片（常见默认） |
-| **UART** | `esp_driver_uart` | 外接 USB-UART 芯片、或第二路 UART 传 PCM |
+| **USB Serial/JTAG** | `esp_driver_usb_serial_jtag` | USB 直连 ESP（S3/C3/C5 等） |
+| **UART** | `esp_driver_uart` | 外接 USB-UART 或第二路 UART |
+| **TCP** | `lwip` socket，connect PC Server | WiFi 板卡，PC 跑 pcm_monitor |
+| **UDP** | `lwip` socket，sendto PC Server | 同上；无连接态，适合调试 |
 
-无论哪种方式：**发 PCM 的那一路不能混 Log/Console 文本**。
+**Serial**：发 PCM 的那一路不能混 Log/Console 文本。  
+**TCP/UDP**：应用需先初始化 WiFi；PCM 与控制命令共用同一传输（TCP 全双工；UDP 同 socket 收控制）。
+
+### 组件 API 示例（推荐）
+
+```c
+#include "esp_audio_pcm.h"
+
+esp_audio_pcm_config_t cfg = esp_audio_pcm_config_default();
+ESP_ERROR_CHECK(esp_audio_pcm_new(&cfg, &pcm));
+ESP_ERROR_CHECK(esp_audio_pcm_open(pcm));   /* TCP: connect; UDP: bind+resolve */
+esp_audio_pcm_write(pcm, buf, len, 20);
+```
+
+menuconfig：`Component config → ESP Audio PCM Toolkit`。
 
 ---
 

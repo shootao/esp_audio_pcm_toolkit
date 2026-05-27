@@ -11,10 +11,44 @@ menu "ESP Audio PCM Toolkit"
         config ESP_AUDIO_PCM_TRANSPORT_UART
             bool "UART"
         config ESP_AUDIO_PCM_TRANSPORT_TCP
-            bool "TCP (reserved)"
+            bool "TCP (device client -> PC server)"
         config ESP_AUDIO_PCM_TRANSPORT_UDP
-            bool "UDP (reserved)"
+            bool "UDP (device client -> PC server)"
     endchoice
+
+    config ESP_AUDIO_PCM_NET_SERVER_IP
+        string "PC monitor server IP"
+        default "192.168.4.2"
+        depends on ESP_AUDIO_PCM_TRANSPORT_TCP || ESP_AUDIO_PCM_TRANSPORT_UDP
+        help
+            IPv4 address of the PC running pcm_monitor bridge (TCP/UDP server).
+
+    config ESP_AUDIO_PCM_TCP_PORT
+        int "TCP server port"
+        default 8766
+        range 1024 65535
+        depends on ESP_AUDIO_PCM_TRANSPORT_TCP
+
+    config ESP_AUDIO_PCM_UDP_PCM_PORT
+        int "UDP PCM port (send to PC server)"
+        default 8766
+        range 1024 65535
+        depends on ESP_AUDIO_PCM_TRANSPORT_UDP
+
+    config ESP_AUDIO_PCM_UDP_LOCAL_PORT
+        int "UDP local bind port (0 = auto)"
+        default 0
+        range 0 65535
+        depends on ESP_AUDIO_PCM_TRANSPORT_UDP
+        help
+            Port bound on device for receiving control commands from PC.
+            Use 0 to let the stack assign an ephemeral port.
+
+    config ESP_AUDIO_PCM_NET_CONNECT_TIMEOUT_MS
+        int "Network connect/open timeout (ms)"
+        default 5000
+        range 1000 60000
+        depends on ESP_AUDIO_PCM_TRANSPORT_TCP || ESP_AUDIO_PCM_TRANSPORT_UDP
 
     config ESP_AUDIO_PCM_USB_RX_BUF_SIZE
         int "USB RX buffer size"

@@ -27,6 +27,7 @@ struct esp_audio_pcm_ops {
 struct esp_audio_pcm {
     esp_audio_pcm_config_t config;
     const esp_audio_pcm_ops_t *ops;
+    void *transport_ctx;
     bool initialized;
     bool opened;
     bool stream_enabled;
@@ -37,3 +38,5 @@ struct esp_audio_pcm {
 
 const esp_audio_pcm_ops_t *esp_audio_pcm_ops_usb(void);
 const esp_audio_pcm_ops_t *esp_audio_pcm_ops_uart(void);
+const esp_audio_pcm_ops_t *esp_audio_pcm_ops_tcp(void);
+const esp_audio_pcm_ops_t *esp_audio_pcm_ops_udp(void);

@@ -17,6 +17,46 @@
 #include "esp_audio_pcm.h"
 #include "esp_audio_pcm_priv.h"
 
+#ifndef CONFIG_ESP_AUDIO_PCM_NET_SERVER_IP
+#define CONFIG_ESP_AUDIO_PCM_NET_SERVER_IP "192.168.4.2"
+#endif
+#ifndef CONFIG_ESP_AUDIO_PCM_TCP_PORT
+#define CONFIG_ESP_AUDIO_PCM_TCP_PORT 8766
+#endif
+#ifndef CONFIG_ESP_AUDIO_PCM_UDP_PCM_PORT
+#define CONFIG_ESP_AUDIO_PCM_UDP_PCM_PORT 8766
+#endif
+#ifndef CONFIG_ESP_AUDIO_PCM_UDP_LOCAL_PORT
+#define CONFIG_ESP_AUDIO_PCM_UDP_LOCAL_PORT 0
+#endif
+#ifndef CONFIG_ESP_AUDIO_PCM_NET_CONNECT_TIMEOUT_MS
+#define CONFIG_ESP_AUDIO_PCM_NET_CONNECT_TIMEOUT_MS 5000
+#endif
+#ifndef CONFIG_ESP_AUDIO_PCM_USB_RX_BUF_SIZE
+#define CONFIG_ESP_AUDIO_PCM_USB_RX_BUF_SIZE 256
+#endif
+#ifndef CONFIG_ESP_AUDIO_PCM_USB_TX_BUF_SIZE
+#define CONFIG_ESP_AUDIO_PCM_USB_TX_BUF_SIZE 4096
+#endif
+#ifndef CONFIG_ESP_AUDIO_PCM_UART_PORT
+#define CONFIG_ESP_AUDIO_PCM_UART_PORT 1
+#endif
+#ifndef CONFIG_ESP_AUDIO_PCM_UART_TX_PIN
+#define CONFIG_ESP_AUDIO_PCM_UART_TX_PIN 17
+#endif
+#ifndef CONFIG_ESP_AUDIO_PCM_UART_RX_PIN
+#define CONFIG_ESP_AUDIO_PCM_UART_RX_PIN 18
+#endif
+#ifndef CONFIG_ESP_AUDIO_PCM_UART_BAUD
+#define CONFIG_ESP_AUDIO_PCM_UART_BAUD 921600
+#endif
+#ifndef CONFIG_ESP_AUDIO_PCM_UART_RX_BUF_SIZE
+#define CONFIG_ESP_AUDIO_PCM_UART_RX_BUF_SIZE 256
+#endif
+#ifndef CONFIG_ESP_AUDIO_PCM_UART_TX_BUF_SIZE
+#define CONFIG_ESP_AUDIO_PCM_UART_TX_BUF_SIZE 4096
+#endif
+
 static const char *TAG = "esp_audio_pcm";
 
 #define ESP_AUDIO_PCM_WRITE_RETRY_MAX 8
@@ -29,9 +69,9 @@ static const esp_audio_pcm_ops_t *esp_audio_pcm_lookup_ops(esp_audio_pcm_transpo
     case ESP_AUDIO_PCM_TRANSPORT_UART:
         return esp_audio_pcm_ops_uart();
     case ESP_AUDIO_PCM_TRANSPORT_TCP:
+        return esp_audio_pcm_ops_tcp();
     case ESP_AUDIO_PCM_TRANSPORT_UDP:
-        ESP_LOGE(TAG, "Transport type %d not implemented yet", type);
-        return NULL;
+        return esp_audio_pcm_ops_udp();
     default:
         return NULL;
     }
@@ -63,14 +103,41 @@ esp_audio_pcm_config_t esp_audio_pcm_config_default_uart(void)
     };
 }
 
+esp_audio_pcm_config_t esp_audio_pcm_config_default_tcp(void)
+{
+    esp_audio_pcm_config_t cfg = {
+        .type = ESP_AUDIO_PCM_TRANSPORT_TCP,
+        .tcp = {
+            .port = CONFIG_ESP_AUDIO_PCM_TCP_PORT,
+            .connect_timeout_ms = CONFIG_ESP_AUDIO_PCM_NET_CONNECT_TIMEOUT_MS,
+        },
+    };
+    strlcpy(cfg.tcp.server_ip, CONFIG_ESP_AUDIO_PCM_NET_SERVER_IP, sizeof(cfg.tcp.server_ip));
+    return cfg;
+}
+
+esp_audio_pcm_config_t esp_audio_pcm_config_default_udp(void)
+{
+    esp_audio_pcm_config_t cfg = {
+        .type = ESP_AUDIO_PCM_TRANSPORT_UDP,
+        .udp = {
+            .pcm_port = CONFIG_ESP_AUDIO_PCM_UDP_PCM_PORT,
+            .local_port = CONFIG_ESP_AUDIO_PCM_UDP_LOCAL_PORT,
+            .connect_timeout_ms = CONFIG_ESP_AUDIO_PCM_NET_CONNECT_TIMEOUT_MS,
+        },
+    };
+    strlcpy(cfg.udp.server_ip, CONFIG_ESP_AUDIO_PCM_NET_SERVER_IP, sizeof(cfg.udp.server_ip));
+    return cfg;
+}
+
 esp_audio_pcm_config_t esp_audio_pcm_config_default(void)
 {
 #if CONFIG_ESP_AUDIO_PCM_TRANSPORT_UART
     return esp_audio_pcm_config_default_uart();
 #elif CONFIG_ESP_AUDIO_PCM_TRANSPORT_TCP
-    return (esp_audio_pcm_config_t){ .type = ESP_AUDIO_PCM_TRANSPORT_TCP };
+    return esp_audio_pcm_config_default_tcp();
 #elif CONFIG_ESP_AUDIO_PCM_TRANSPORT_UDP
-    return (esp_audio_pcm_config_t){ .type = ESP_AUDIO_PCM_TRANSPORT_UDP };
+    return esp_audio_pcm_config_default_udp();
 #else
     return esp_audio_pcm_config_default_usb();
 #endif

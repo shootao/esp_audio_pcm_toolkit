@@ -104,7 +104,8 @@ for /L %%I in (1,1,20) do (
 
 echo WARNING: monitor.url not found. Check the PCM Monitor window for errors.
 
-echo Try opening: http://127.0.0.1:8765/pcm_serial_monitor.html
+echo Try opening: http://127.0.0.1:8765/pcm_serial_monitor.html?v=1
+echo Close old "PCM Monitor" window first, then re-run this bat.
 
 pause
 

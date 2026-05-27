@@ -20,8 +20,8 @@ extern "C" {
 typedef enum {
     ESP_AUDIO_PCM_TRANSPORT_USB = 0,
     ESP_AUDIO_PCM_TRANSPORT_UART,
-    ESP_AUDIO_PCM_TRANSPORT_TCP,  /* reserved */
-    ESP_AUDIO_PCM_TRANSPORT_UDP,  /* reserved */
+    ESP_AUDIO_PCM_TRANSPORT_TCP,
+    ESP_AUDIO_PCM_TRANSPORT_UDP,
 } esp_audio_pcm_transport_t;
 
 typedef struct {
@@ -39,10 +39,25 @@ typedef struct {
 } esp_audio_pcm_uart_config_t;
 
 typedef struct {
+    char server_ip[16];
+    uint16_t port;
+    int connect_timeout_ms;
+} esp_audio_pcm_tcp_config_t;
+
+typedef struct {
+    char server_ip[16];
+    uint16_t pcm_port;
+    uint16_t local_port;
+    int connect_timeout_ms;
+} esp_audio_pcm_udp_config_t;
+
+typedef struct {
     esp_audio_pcm_transport_t type;
     union {
         esp_audio_pcm_usb_config_t usb;
         esp_audio_pcm_uart_config_t uart;
+        esp_audio_pcm_tcp_config_t tcp;
+        esp_audio_pcm_udp_config_t udp;
     };
 } esp_audio_pcm_config_t;
 
@@ -95,6 +110,12 @@ esp_audio_pcm_config_t esp_audio_pcm_config_default_usb(void);
 
 /** Default UART config (Kconfig overrides pins/baud). */
 esp_audio_pcm_config_t esp_audio_pcm_config_default_uart(void);
+
+/** Default TCP client config (connects to PC monitor server). */
+esp_audio_pcm_config_t esp_audio_pcm_config_default_tcp(void);
+
+/** Default UDP client config (PCM to server, control on same socket). */
+esp_audio_pcm_config_t esp_audio_pcm_config_default_udp(void);
 
 /** Pick transport config from menuconfig (ESP_AUDIO_PCM_TRANSPORT_*). */
 esp_audio_pcm_config_t esp_audio_pcm_config_default(void);

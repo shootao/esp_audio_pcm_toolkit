@@ -6,7 +6,7 @@
 
 | Part | Location | Role |
 |------|----------|------|
-| Device library | `include/esp_audio_pcm.h` | Stream PCM over USB/UART; parse control commands |
+| Device library | `include/esp_audio_pcm.h` | Stream PCM over USB / UART / TCP / UDP; parse control commands |
 | PC monitor | [`tools/pcm_monitor/`](./tools/pcm_monitor/) | Waveform, live listen, WAV save, send `vol` / `gain` / `gch` |
 
 ## Device API (ESP-IDF component)
@@ -38,8 +38,22 @@ esp_audio_pcm_write(pcm, buffer, len, 20);
 |------|--------|------------|
 | USB Serial/JTAG | Supported | `ESP Audio PCM Toolkit → USB Serial/JTAG` |
 | UART | Supported | `ESP Audio PCM Toolkit → UART` |
-| TCP | Reserved | — |
-| UDP | Reserved | — |
+| TCP | Supported | Device **client** → PC **server** (see PC monitor) |
+| UDP | Supported | Device **client** → PC **server** (see PC monitor) |
+
+**TCP/UDP notes**
+
+- Application must bring up **WiFi** (and `app_net_init()` or equivalent) before `esp_audio_pcm_open()`.
+- Set **PC monitor server IP** and port in menuconfig (default PCM port **8766**).
+- TCP reconnects automatically on the next `esp_audio_pcm_write()` after the PC server restarts.
+
+Network menuconfig keys (when TCP or UDP is selected):
+
+| Option | Purpose |
+|--------|---------|
+| `PC monitor server IP` | IPv4 of the PC running pcm_monitor |
+| `TCP server port` / `UDP PCM port` | Must match the port in the web UI (default 8766) |
+| `UDP local bind port` | `0` = auto (receive control on same socket) |
 
 ### Control command format (text, one line)
 
@@ -58,18 +72,25 @@ See [`tools/pcm_monitor/README.md`](./tools/pcm_monitor/README.md).
 
 Windows: double-click `tools/pcm_monitor/start_monitor.bat`.
 
+| Transport (web UI) | PC role | Connect action |
+|--------------------|---------|----------------|
+| Serial (USB/UART) | Opens COM port | **Connect COM** |
+| TCP / UDP | Listens on `0.0.0.0:port` | **Start TCP/UDP Server** — device connects in |
+
 ## Example
 
-[`examples/basic_example/`](./examples/basic_example/) — dummy PCM stream + remote control, no codec/BSP.
+[`examples/basic_example/`](./examples/basic_example/) — Hi Nomi BSP + `esp_codec_dev` record, PCM stream, remote control.
 
 ```bash
 cd examples/basic_example && idf.py build flash monitor
 ```
 
+Reference integration: [`test/hi_nomi_record_play/main/`](../../main/) (WiFi + TCP/UDP via menuconfig).
+
 ## Dependencies
 
 - ESP-IDF ≥ 5.0
-- `esp_driver_usb_serial_jtag` and/or `esp_driver_uart`
+- `esp_driver_usb_serial_jtag`, `esp_driver_uart`, `lwip` (TCP/UDP)
 
 ## License
 
