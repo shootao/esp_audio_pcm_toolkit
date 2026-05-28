@@ -32,6 +32,9 @@
 #ifndef CONFIG_ESP_AUDIO_PCM_NET_CONNECT_TIMEOUT_MS
 #define CONFIG_ESP_AUDIO_PCM_NET_CONNECT_TIMEOUT_MS 5000
 #endif
+#ifndef CONFIG_ESP_AUDIO_PCM_TCP_TX_BUF_SIZE
+#define CONFIG_ESP_AUDIO_PCM_TCP_TX_BUF_SIZE 1048576
+#endif
 #ifndef CONFIG_ESP_AUDIO_PCM_USB_RX_BUF_SIZE
 #define CONFIG_ESP_AUDIO_PCM_USB_RX_BUF_SIZE 256
 #endif
@@ -110,6 +113,7 @@ esp_audio_pcm_config_t esp_audio_pcm_config_default_tcp(void)
         .tcp = {
             .port = CONFIG_ESP_AUDIO_PCM_TCP_PORT,
             .connect_timeout_ms = CONFIG_ESP_AUDIO_PCM_NET_CONNECT_TIMEOUT_MS,
+            .tx_buffer_size = CONFIG_ESP_AUDIO_PCM_TCP_TX_BUF_SIZE,
         },
     };
     strlcpy(cfg.tcp.server_ip, CONFIG_ESP_AUDIO_PCM_NET_SERVER_IP, sizeof(cfg.tcp.server_ip));

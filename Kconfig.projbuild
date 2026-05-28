@@ -50,6 +50,17 @@ menu "ESP Audio PCM Toolkit"
         range 1000 60000
         depends on ESP_AUDIO_PCM_TRANSPORT_TCP || ESP_AUDIO_PCM_TRANSPORT_UDP
 
+    config ESP_AUDIO_PCM_TCP_TX_BUF_SIZE
+        int "TCP TX ring buffer size (bytes, PSRAM preferred)"
+        default 1048576
+        range 4096 4194304
+        depends on ESP_AUDIO_PCM_TRANSPORT_TCP
+        help
+            Application-level send ring for TCP PCM. When SPIRAM is enabled and
+            initialized, the buffer is allocated from PSRAM (~1 MiB default).
+            Smooths WiFi/TCP backpressure and reduces dropouts. Without PSRAM,
+            a smaller internal-RAM fallback is used.
+
     config ESP_AUDIO_PCM_USB_RX_BUF_SIZE
         int "USB RX buffer size"
         default 256

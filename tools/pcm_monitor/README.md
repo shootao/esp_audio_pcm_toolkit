@@ -2,65 +2,168 @@
 
 本目录为 **esp_audio_pcm_toolkit** 组件的 PC 端工具，与设备端 `esp_audio_pcm_*` API 配套使用。
 
-支持三种传输方式：
-
-| 方式 | 数据方向 | 网页操作 |
-|------|----------|----------|
-| **Serial (USB/UART)** | ESP → PC（CDC/UART） | 选 COM 口 → **连接 COM 口** |
-| **TCP** | ESP 连 PC Server，双向 | 选 TCP → **启动 TCP Server** |
-| **UDP** | ESP 发包到 PC，控制命令 UDP 回包 | 选 UDP → **启动 UDP Server** |
-
-通过上述链路接收 ESP 固件输出的 PCM，在 PC 上显示波形、试听、保存 WAV，并下发 `vol` / `gain` / `gch` 控制命令。
+通过 Serial / TCP / UDP 接收 ESP 固件输出的 PCM，在 PC 上显示波形、实时试听、保存 WAV，并下发 `vol` / `gain` / `gch` 控制命令。
 
 ---
 
-## 怎么用（Windows）
+## 使用说明
 
-**直接双击 `start_monitor.bat`**，浏览器会自动打开（URL 带 `?v=` 防缓存）。
+### 启动
 
-> 不要直接双击 `.html` 文件。更新 HTML 后请 **关闭旧的「PCM Monitor」黑窗口**，再重新运行 bat。
+**Windows：双击 `start_monitor.bat`**，浏览器会自动打开（URL 带 `?v=` 防缓存）。
 
-### Serial（USB / UART）
+> 不要直接双击 `.html`。更新页面后请 **关闭旧的「PCM Monitor」黑窗口**，再重新运行 bat。
+
+Linux / macOS：
+
+```bash
+python3 pcm_serial_bridge.py
+# 浏览器打开终端里打印的 http://127.0.0.1:8765/...
+```
+
+---
+
+### 1. 传输模式（Serial / TCP / UDP）
+
+页面顶部 **传输方式** 下拉框三选一。选 TCP/UDP 时会隐藏 COM 口区域，改为显示 **PCM 监听端口** 与 **PC 本机 IP**。
+
+| 模式 | 架构 | 典型场景 | 网页操作 |
+|------|------|----------|----------|
+| **Serial (USB/UART)** | ESP → PC 单向字节流 | USB 直连、外接 USB-UART | 选 COM 口 → **连接 COM 口** |
+| **TCP** | **PC = Server，ESP = Client**，全双工 | WiFi 板卡，需稳定连接与控制回传 | 选 TCP → **启动 TCP Server** |
+| **UDP** | **PC = Server**，ESP 发包；控制命令 UDP 回包 | WiFi 调试，无连接态 | 选 UDP → **启动 UDP Server** |
+
+#### Serial（USB / UART）
 
 1. 传输方式选 **Serial (USB/UART)**
-2. 选 COM 口（或填 `COM23`）→ **连接 COM 口**
-3. 使用前：烧好固件、关闭 `idf.py monitor`
+2. 下拉选 COM 口，或在 **Manual COM** 填 `COM23`，波特率一般 **115200**（CDC 握手用，与采样率无关）
+3. 点 **连接 COM 口**；状态栏显示 Connected，波形开始滚动
+4. **使用前**：烧好固件、关闭 `idf.py monitor`，且固件在发 PCM 前须 `esp_log_level_set("*", ESP_LOG_NONE)`（见下文「Serial 注意」）
 
-### TCP / UDP（已验证）
+#### TCP / UDP（WiFi）
 
-架构：**PC = Server，ESP = Client**（同一 WiFi / 局域网）。
+架构：**PC 作 Server，ESP 作 Client**（同一 WiFi / 局域网）。
 
 1. 传输方式选 **TCP** 或 **UDP**
 2. 确认 **PCM 监听端口**（默认 **8766**，须与设备 menuconfig 一致）
-3. 在 **PC 本机 IP** 列表中选与 ESP 同网段的地址（或手动覆盖）
+3. 在 **PC 本机 IP** 列表中选与 ESP **同网段** 的地址（多网卡时可手动覆盖）
 4. 点 **启动 TCP Server** / **启动 UDP Server**
-5. 设备 menuconfig：
+5. 设备 menuconfig 配置：
    - `ESP Audio PCM Toolkit → PCM stream transport` → TCP 或 UDP
    - `PC monitor server IP` → 网页上显示的 PC IP
    - 端口与网页一致
    - （`hi_nomi_record_play`）`Hi Nomi Record Play → WiFi SSID / password`
-6. 设备上电连 WiFi 后自动推 PCM；状态栏显示「设备已连接」
+6. 设备上电连 WiFi 后自动推 PCM；状态栏显示 **设备已连接**
 
 **停止 / 再开 Server**
 
 | 模式 | 设备是否要重启 |
 |------|----------------|
-| TCP | 一般 **不用**；下次发 PCM 会自动重连 |
+| TCP | 一般 **不用**；设备下次发 PCM 会自动重连 |
 | UDP | **不用**；继续发包即可 |
 
-桥接黑窗口会打印本机 IP 列表；也可访问 `http://127.0.0.1:8765/api/version` 确认桥接版本（含 `modes: serial/tcp/udp`）。
+桥接黑窗口会打印本机 IP；也可访问 `http://127.0.0.1:8765/api/version` 确认桥接版本（含 `modes: serial/tcp/udp`）。
 
-### ⚠️ Serial 模式：固件必须关闭所有 Log
+#### 音频参数（三种模式通用）
+
+须与固件一致，否则波形/试听/保存都会错：
+
+| 参数 | 常见值 | 说明 |
+|------|--------|------|
+| Sample Rate | **16000** | 采样率 Hz，**不是**串口波特率 |
+| Channels | **1–4** | 多通道交错 PCM |
+| Bits | **16** | 有符号 16 位 |
+| Endian | **Little-endian** | 小端 |
+| Wave Window | 1–8 s | 波形可见时间窗口 |
+
+交错格式：`Ch0_s0, Ch1_s0, Ch2_s0, …, Ch0_s1, Ch1_s1, …`
+
+#### Serial 注意：固件必须关闭 Log
 
 USB/UART 口传的是**纯 PCM 二进制**，任何日志文字混进去都会导致波形乱码。
 
 TCP/UDP 网络口不经过 USB CDC，Console/Log 可仍走 UART；但 **PCM 链路上仍不要打印 Log**。
 
-开始发 PCM **之前**（Serial 模式尤其重要）：
-
 ```c
 esp_log_level_set("*", ESP_LOG_NONE);
 ```
+
+---
+
+### 2. 波形与实时播放（含 M 静音）
+
+#### 波形
+
+- 每个通道单独一条轨（Ch0、Ch1…），滚轮缩放、**Shift + 滚轮** 平移
+- **跟随最新**：回到实时末尾
+- **暂停**：冻结波形与录制缓冲（不再追加新数据）
+
+#### 实时播放
+
+1. **先连接**（Serial 已连 COM，或 TCP/UDP 已显示设备已连接），确认波形在动
+2. 点 **开启实时播放**（须用户点击，浏览器才允许出声）
+3. 浏览器内混合播放当前未静音的通道；Peak / RMS 电平表与试听一致
+
+#### M 静音（类似 Audacity）
+
+开启实时播放后，**每条波形轨右侧** 会出现 **M** 按钮：
+
+| 状态 | 说明 |
+|------|------|
+| 默认 | 全部通道出声（M 为灰色） |
+| 点 **M** | 该通道静音（按钮变橙，轨名划线变灰） |
+| 再点 **M** | 取消静音 |
+| 关闭实时播放 | M 按钮隐藏；静音状态会保留，下次再开仍有效 |
+
+**典型用法**：4 麦时 Ch0 可能无信号、Ch2 有声音 → 开启播放后对 Ch0/Ch1/Ch3 点 **M**，只留 Ch2 试听。
+
+波形下方状态栏会显示当前参与播放的通道，例如 `play Ch2` 或 `play Ch1+Ch2`。
+
+---
+
+### 3. 保存 WAV 并用 Audacity 查看
+
+Monitor 会把**当前缓冲**（连接后收到、且未被「暂停」丢弃的部分）导出为标准 WAV，可直接用 [Audacity](https://www.audacityteam.org/) 打开做进一步分析。
+
+#### 操作步骤
+
+1. 连接设备，确认 **Sample Rate / Channels / Bits** 与固件一致
+2. 录制一段时间（波形在滚动；若需固定片段可先 **暂停** 再保存）
+3. 点 **Save WAV**，选择保存路径
+4. 打开 **Audacity** → **文件 → 打开**，选中刚保存的 `.wav`
+
+#### 在 Audacity 里
+
+- 多通道 WAV 会显示为**多条轨**（与 monitor 网页分轨一致）
+- 可单独 **Solo / Mute** 某轨、放大某段、看频谱（**分析 → 绘制频谱**）
+- 若打开后无声或时长不对，回到 monitor 核对 **16000 Hz / 通道数 / 16-bit** 是否与固件一致
+
+#### 命令行录 PCM（不经网页）
+
+```bash
+python3 usb_pcm_capture.py -p COM23 -o capture.pcm -c 4 --rate 16000
+```
+
+得到原始 `.pcm` 时，可在 Audacity 用 **文件 → 导入 → 原始数据** 导入，并手动设：编码 **Signed 16-bit PCM**、字节序 **Little-endian**、通道数与采样率。  
+**推荐直接用网页 Save WAV**，已带好 WAV 头，Audacity 开箱即开。
+
+---
+
+### 4. 设备控制（音量 / 增益）
+
+连接 Serial / TCP / UDP 后，**设备控制** 面板可用：
+
+- **播放音量** 0–100（%）
+- **Ch0 – Ch3** mic 增益滑条（与 `gch 0`…`gch 3` 对应）
+
+**重要：拖动滑条不会立刻生效**，须再点红色 **Apply to device**，才会发送 `vol` / `gch` 命令（适用于三种传输方式）。
+
+| 命令 | 说明 |
+|------|------|
+| `vol 70` | 播放音量 0–100 |
+| `gch 0 30.0` | Ch0 增益 dB |
+| `gch 1 30.0` | Ch1 |
+| `gain 30.0` | 所有通道同一增益 |
 
 ---
 
@@ -90,43 +193,16 @@ Windows 下若 `python3` 不可用，可改为 `python` 或 `py -3`。
 
 ---
 
-## PCM 参数（须与固件一致）
+## 网页功能速查
 
-| 参数 | 常见示例 | 说明 |
-|------|----------|------|
-| Sample Rate | **16000** | 采样率（Hz），不是串口波特率 |
-| Channels | **1–4**（按固件） | 多通道交错 PCM |
-| Bits | **16** | 有符号 16 位 |
-| Endian | **Little-endian** | 小端 |
-| 串口波特率 | **115200** | 仅用于 CDC 握手，与采样率无关 |
-
-固件常见：`16000 Hz / 16 bit / N ch`，交错格式（Ch0_s0, Ch1_s0, …, Ch0_s1, …）。
-
----
-
-## 网页功能
-
-- **传输方式**：Serial / TCP / UDP（TCP/UDP 时隐藏 COM 口区域）
-- **波形**：多通道分轨显示，支持滚轮缩放、Shift+滚轮平移
-- **Wave Window**：控制可见时间窗口（1–8 秒）
-- **暂停**：冻结波形与录制缓冲
-- **开启实时播放**：浏览器内试听（16 kHz → 重采样到 ~48 kHz）
-- **Save WAV**：保存当前缓冲为 WAV
-- **设备控制**（连接 Serial / TCP / UDP 后）：
-  - **播放音量** 0–100（%）、**Ch0 – Ch3** _mic 增益滑条（与 `gch 0`…`gch 3` 对应）
-  - **重要：拖动滑条或改数字不会立刻生效**，须再点红色 **Apply to device**，才会向设备发送 `vol` / `gch` 命令
-  - 适用于 Serial、TCP、UDP（命令走同一传输 RX，不在 PCM 流里回显）
-
-下发命令格式（与 UART Console 一致，若固件实现了对应命令）：
-
-| 命令 | 说明 |
+| 功能 | 说明 |
 |------|------|
-| `vol 70` | 播放音量 0–100 |
-| `gch 0 30.0` | Ch0 增益 dB |
-| `gch 1 30.0` | Ch1 |
-| `gch 2 30.0` | Ch2 |
-| `gch 3 30.0` | Ch3（4 通道时） |
-| `gain 30.0` | 所有通道同一增益 |
+| 传输方式 | Serial / TCP / UDP（详见上文 §1） |
+| 波形 | 多通道分轨；滚轮缩放、Shift+滚轮平移 |
+| 暂停 | 冻结缓冲，便于截取一段再 Save WAV |
+| 开启实时播放 | 浏览器试听；每条轨 **M** 静音（详见上文 §2） |
+| Save WAV | 导出标准 WAV，可用 Audacity 打开（详见上文 §3） |
+| Apply to device | 下发 `vol` / `gch`（详见上文 §4） |
 
 ---
 
@@ -178,8 +254,17 @@ Windows 下若 `python3` 不可用，可改为 `python` 或 `py -3`。
 
 ### 无声音（实时播放）
 
-- 点击 **开启实时播放** 后，浏览器可能需用户交互才能启动 AudioContext
-- 确认已 **连接** 且波形在动
+1. **先连接**，波形要在动，再点 **开启实时播放**
+2. 开启后检查各轨 **M** 是否误静音（默认全部出声）
+3. **Sample Rate** 填 **16000**，**Channels** 与固件一致
+4. 系统音量、浏览器标签页勿静音；用 `start_monitor.bat` 打开（`http://127.0.0.1`）
+5. 仍无声：F12 → Console 查看 AudioContext 报错
+
+### Save WAV 在 Audacity 里打不开或不对
+
+- 保存前确认 **Sample Rate / Channels / Bits** 与固件一致
+- 优先用 **Save WAV** 直接打开；不要用错误参数导入原始 `.pcm`
+- 若只有 `.pcm`，Audacity 导入时选 **Signed 16-bit PCM、Little-endian**，并填对通道数与采样率
 
 ---
 

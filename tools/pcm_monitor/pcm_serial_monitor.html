@@ -327,13 +327,57 @@
 
     .wave-track:last-child { border-bottom: none; }
 
-    .wave-track-label {
+    .wave-track-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
       padding: 4px 18px;
+      background: #f1f5f9;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .wave-track-name {
       font-size: 0.78rem;
       font-weight: 500;
       color: var(--muted);
-      background: #f1f5f9;
-      border-bottom: 1px solid var(--border);
+    }
+
+    .wave-mute-btn {
+      display: none;
+      min-width: 26px;
+      height: 22px;
+      padding: 0 6px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      line-height: 1;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      background: #fff;
+      color: #64748b;
+      cursor: pointer;
+    }
+
+    .wave-tracks.playback-active .wave-mute-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .wave-mute-btn:hover {
+      border-color: #94a3b8;
+      color: #334155;
+    }
+
+    .wave-mute-btn.muted {
+      background: #f59e0b;
+      border-color: #d97706;
+      color: #fff;
+    }
+
+    .wave-tracks.playback-active .wave-track.track-muted .wave-track-name {
+      opacity: 0.45;
+      text-decoration: line-through;
     }
 
     .wave-track canvas {
@@ -392,6 +436,11 @@
       font-size: 0.88rem;
       color: #64748b;
       margin: 0 0 12px;
+    }
+
+    .play-hint {
+      margin-top: -6px;
+      font-size: 0.8rem;
     }
 
     .ctrl-row {
@@ -566,6 +615,7 @@
     <div class="panel" id="devCtrlPanel">
       <h2 class="panel-title">设备控制</h2>
       <p class="ctrl-hint">连接后调整音量/增益，须点下方红色 <strong>Apply to device</strong> 才会下发（滑条不会自动发送）。</p>
+      <p class="ctrl-hint play-hint">开启实时播放后，每条波形轨右侧会出现 <strong>M</strong> 静音钮（类似 Audacity）；默认全部出声，点 M 可单独关掉某通道。</p>
       <label class="ctrl-row">
         播放音量
         <div class="ctrl-inline">
@@ -598,15 +648,6 @@
           <select id="bits">
             <option value="16" selected>16 (signed)</option>
             <option value="8">8 (unsigned)</option>
-          </select>
-        </label>
-        <label>Monitor Channel
-          <select id="monitorCh">
-            <option value="0">Ch0</option>
-            <option value="1">Ch1</option>
-            <option value="2">Ch2</option>
-            <option value="3">Ch3</option>
-            <option value="mix">Mix All</option>
           </select>
         </label>
         <label>Endian
@@ -712,7 +753,6 @@
       sampleRate: document.getElementById('sampleRate'),
       channels: document.getElementById('channels'),
       bits: document.getElementById('bits'),
-      monitorCh: document.getElementById('monitorCh'),
       endian: document.getElementById('endian'),
       waveWindow: document.getElementById('waveWindow'),
       pauseBtn: document.getElementById('pauseBtn'),
@@ -741,7 +781,7 @@
     const DEFAULT_MIC_GAIN_DB = 30;
     const MIC_GAIN_DB_MAX = 36.5;
     const LS_PC_IP_MANUAL = 'pcm_monitor_pc_ip_manual';
-    const PAGE_BUILD = '2026 · v0.2.0';
+    const PAGE_BUILD = '2026 · v0.2.2';
 
     if (!document.getElementById('transportMode')) {
       alert(
@@ -926,6 +966,7 @@
     let webSerialPort = null;
     let webSerialReader = null;
     let webSerialWriter = null;
+    let channelMuted = new Map();
     let playbackEnabled = false;
     let streamPaused = false;
     let followLive = true;
@@ -947,6 +988,7 @@
     let playR = 0;
     let playCount = 0;
     let playPhase = 0;
+    let playHealthTimer = null;
     let waveDirty = false;
     let drawPending = false;
 
@@ -1009,31 +1051,52 @@
       return Array.from({ length: n }, (_, i) => `Ch${i}`);
     }
 
-    function refreshMonitorChOptions() {
-      if (!els.monitorCh) return;
-      const n = micCountFromUi();
-      const labels = channelLabels(n);
-      const prev = els.monitorCh.value;
-      els.monitorCh.innerHTML = '';
+    function isChannelMuted(ch) {
+      return channelMuted.get(ch) === true;
+    }
+
+    function setChannelMuted(ch, muted) {
+      channelMuted.set(ch, muted);
+      const btn = document.querySelector(`.wave-mute-btn[data-ch="${ch}"]`);
+      if (btn) {
+        btn.classList.toggle('muted', muted);
+        btn.setAttribute('aria-pressed', muted ? 'true' : 'false');
+        btn.title = muted ? '取消静音 (Unmute)' : '静音 (Mute)';
+      }
+      const track = btn?.closest('.wave-track');
+      if (track) track.classList.toggle('track-muted', muted);
+    }
+
+    function syncPlaybackTrackUi() {
+      const on = playbackEnabled;
+      if (els.waveTracks) {
+        els.waveTracks.classList.toggle('playback-active', on);
+      }
+    }
+
+    function getPlayChannelIndices(c) {
+      const n = c?.channels ?? micCountFromUi();
+      const indices = [];
       for (let ch = 0; ch < n; ch++) {
-        const opt = document.createElement('option');
-        opt.value = String(ch);
-        opt.textContent = labels[ch];
-        els.monitorCh.appendChild(opt);
+        if (!isChannelMuted(ch)) indices.push(ch);
       }
-      const mix = document.createElement('option');
-      mix.value = 'mix';
-      mix.textContent = 'Mix All';
-      els.monitorCh.appendChild(mix);
-      if (prev === 'mix' || (Number(prev) >= 0 && Number(prev) < n)) {
-        els.monitorCh.value = prev;
-      } else {
-        els.monitorCh.value = '0';
-      }
+      return indices;
+    }
+
+    function formatPlayChannelsLabel(indices) {
+      if (!indices.length) return 'none (all muted)';
+      if (indices.length === 1) return `Ch${indices[0]}`;
+      return indices.map((i) => `Ch${i}`).join('+');
     }
 
     function initWaveTracks() {
       const n = cfg().channels;
+      const prevMuted = new Map(channelMuted);
+      channelMuted = new Map();
+      for (let ch = 0; ch < n; ch++) {
+        channelMuted.set(ch, prevMuted.get(ch) === true);
+      }
+
       els.waveTracks.innerHTML = '';
       waveCanvases = [];
       resetHistory();
@@ -1042,20 +1105,49 @@
       for (let ch = 0; ch < n; ch++) {
         const track = document.createElement('div');
         track.className = 'wave-track';
+        if (isChannelMuted(ch)) track.classList.add('track-muted');
 
-        const label = document.createElement('div');
-        label.className = 'wave-track-label';
-        label.textContent = labels[ch] ?? `Ch${ch}`;
+        const head = document.createElement('div');
+        head.className = 'wave-track-head';
+
+        const name = document.createElement('span');
+        name.className = 'wave-track-name';
+        name.textContent = labels[ch] ?? `Ch${ch}`;
+
+        const muteBtn = document.createElement('button');
+        muteBtn.type = 'button';
+        muteBtn.className = 'wave-mute-btn';
+        muteBtn.dataset.ch = String(ch);
+        muteBtn.textContent = 'M';
+        muteBtn.setAttribute('aria-label', `Mute ${labels[ch] ?? `Ch${ch}`}`);
+        if (isChannelMuted(ch)) {
+          muteBtn.classList.add('muted');
+          muteBtn.setAttribute('aria-pressed', 'true');
+          muteBtn.title = '取消静音 (Unmute)';
+        } else {
+          muteBtn.setAttribute('aria-pressed', 'false');
+          muteBtn.title = '静音 (Mute)';
+        }
+        muteBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          setChannelMuted(ch, !isChannelMuted(ch));
+          resetPlayRing();
+          drawWaveform();
+        });
+
+        head.appendChild(name);
+        head.appendChild(muteBtn);
 
         const canvas = document.createElement('canvas');
         canvas.width = 1200;
         canvas.height = 100;
 
-        track.appendChild(label);
+        track.appendChild(head);
         track.appendChild(canvas);
         els.waveTracks.appendChild(track);
         waveCanvases.push(canvas);
       }
+      syncPlaybackTrackUi();
       drawWaveform();
     }
 
@@ -1068,7 +1160,6 @@
         sampleRate,
         channels: Number(els.channels.value),
         bits: Number(els.bits.value),
-        monitorCh: els.monitorCh.value,
         endian: els.endian.value,
         waveWindowSec: Number(els.waveWindow?.value || 3),
       };
@@ -1261,12 +1352,11 @@
     }
 
     function pickMonitorSample(samples, c) {
-      if (c.monitorCh === 'mix') {
-        let sum = 0;
-        for (let i = 0; i < samples.length; i++) sum += samples[i];
-        return sum / samples.length;
-      }
-      return samples[Number(c.monitorCh)] ?? 0;
+      const sel = getPlayChannelIndices(c);
+      if (!sel.length) return 0;
+      let sum = 0;
+      for (const ch of sel) sum += samples[ch] ?? 0;
+      return sum / sel.length;
     }
 
     function pushPlaySample(sample) {
@@ -1357,7 +1447,8 @@
       }
 
       const state = streamPaused ? 'paused' : (followLive ? 'live' : 'review');
-      els.waveInfo.textContent = `${c.sampleRate} Hz · ${c.channels} ch · ${c.bits}-bit · ${state} · monitor ${c.monitorCh}`;
+      const playSel = formatPlayChannelsLabel(getPlayChannelIndices(c));
+      els.waveInfo.textContent = `${c.sampleRate} Hz · ${c.channels} ch · ${c.bits}-bit · ${state} · play ${playSel}`;
     }
 
     function processPcmBytes(chunk) {
@@ -1525,23 +1616,65 @@
       }
     }
 
+    function stopPlayHealthCheck() {
+      if (playHealthTimer) {
+        clearTimeout(playHealthTimer);
+        playHealthTimer = null;
+      }
+    }
+
+    function startPlayHealthCheck() {
+      stopPlayHealthCheck();
+      playHealthTimer = setTimeout(() => {
+        playHealthTimer = null;
+        if (!playbackEnabled || !connected) return;
+        if (playCount < 64) {
+          alert(
+            '实时播放已开启，但音频缓冲几乎为空。\n\n'
+            + '请检查：\n'
+            + '1. 是否已连接且波形在动\n'
+            + '2. 波形轨是否误点了 M 静音，或只对有信号的轨取消静音\n'
+            + '3. Sample Rate / Channels 是否与固件一致\n'
+            + '4. 系统音量与浏览器标签页是否静音'
+          );
+        }
+      }, 2500);
+    }
+
     async function ensureAudio() {
+      const wantRate = cfg().sampleRate;
+      if (audioCtx && (audioCtx.state === 'closed' || Math.abs(audioCtx.sampleRate - wantRate) > 1)) {
+        if (scriptNode) scriptNode.disconnect();
+        if (gainNode) gainNode.disconnect();
+        await audioCtx.close().catch(() => {});
+        audioCtx = null;
+        scriptNode = null;
+        gainNode = null;
+      }
+
       if (!audioCtx) {
-        audioCtx = new AudioContext();
+        try {
+          audioCtx = new AudioContext({ sampleRate: wantRate });
+        } catch {
+          audioCtx = new AudioContext();
+        }
         gainNode = audioCtx.createGain();
-        gainNode.gain.value = 2.0;
-        scriptNode = audioCtx.createScriptProcessor(2048, 0, 1);
+        gainNode.gain.value = 2.5;
+        /* 1 input channel: better compatibility than 0 inputs in some browsers */
+        scriptNode = audioCtx.createScriptProcessor(4096, 1, 1);
         scriptNode.onaudioprocess = (event) => {
           if (!playbackEnabled) return;
           const out = event.outputBuffer.getChannelData(0);
           const inRate = cfg().sampleRate;
           const outRate = audioCtx.sampleRate;
+          if (!inRate || inRate < 1000) return;
+          const step = inRate / outRate;
           for (let i = 0; i < out.length; i++) {
             if (playCount > 0) {
               const s0 = playRing[playR];
               const s1 = playCount > 1 ? playRing[(playR + 1) % PLAY_RING_SIZE] : s0;
               out[i] = s0 + (s1 - s0) * playPhase;
-              playPhase += inRate / outRate;
+              playPhase += step;
               while (playPhase >= 1 && playCount > 0) {
                 playPhase -= 1;
                 playR = (playR + 1) % PLAY_RING_SIZE;
@@ -1556,7 +1689,8 @@
         scriptNode.connect(gainNode);
         gainNode.connect(audioCtx.destination);
       }
-      if (audioCtx.state === 'suspended') {
+
+      if (audioCtx.state === 'suspended' || audioCtx.state === 'interrupted') {
         await audioCtx.resume();
       }
     }
@@ -1657,8 +1791,10 @@
 
     async function disconnectTransport() {
       playbackEnabled = false;
+      stopPlayHealthCheck();
       els.playBtn.textContent = '开启实时播放';
       resetPlayRing();
+      syncPlaybackTrackUi();
       if (scriptNode) scriptNode.disconnect();
       if (gainNode) gainNode.disconnect();
       if (audioCtx) await audioCtx.close().catch(() => {});
@@ -1823,19 +1959,27 @@
     });
     els.playBtn.addEventListener('click', async () => {
       if (!playbackEnabled) {
+        if (!connected) {
+          alert('请先连接 COM 口或启动 TCP/UDP Server，并确认波形在动。');
+          return;
+        }
         try {
           await ensureAudio();
           resetPlayRing();
           playbackEnabled = true;
           els.playBtn.textContent = '关闭实时播放';
+          syncPlaybackTrackUi();
+          startPlayHealthCheck();
         } catch (err) {
           console.error(err);
-          alert('无法启动音频输出，请检查浏览器是否允许播放声音。');
+          alert('无法启动音频输出：' + (err.message || err) + '\n请确认通过 http://127.0.0.1 打开页面，并允许浏览器播放声音。');
         }
       } else {
         playbackEnabled = false;
+        stopPlayHealthCheck();
         els.playBtn.textContent = '开启实时播放';
         resetPlayRing();
+        syncPlaybackTrackUi();
       }
     });
     els.saveBtn.addEventListener('click', saveWav);
@@ -1853,13 +1997,12 @@
       zoomWave(factor, anchorRatio);
     }, { passive: false });
 
-    ['sampleRate', 'channels', 'bits', 'monitorCh', 'endian', 'waveWindow'].forEach((id) => {
+    ['sampleRate', 'channels', 'bits', 'endian', 'waveWindow'].forEach((id) => {
       document.getElementById(id).addEventListener('change', () => {
         if (id === 'sampleRate') {
           normalizeSampleRateInput();
         }
         if (id === 'channels') {
-          refreshMonitorChOptions();
           initWaveTracks();
           buildMicGainControls();
         } else if (id === 'waveWindow') {
@@ -1887,7 +2030,6 @@
         normalizeSampleRateInput();
         await detectHttpBridge();
         setupPortUi();
-        refreshMonitorChOptions();
         initWaveTracks();
         buildMicGainControls();
         if (isNetworkMode()) {

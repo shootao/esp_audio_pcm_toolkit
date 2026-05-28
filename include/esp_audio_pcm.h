@@ -42,6 +42,8 @@ typedef struct {
     char server_ip[16];
     uint16_t port;
     int connect_timeout_ms;
+    /** TX ring size in bytes; 0 = Kconfig default (1 MiB when PSRAM available). */
+    int tx_buffer_size;
 } esp_audio_pcm_tcp_config_t;
 
 typedef struct {

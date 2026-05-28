@@ -46,6 +46,7 @@ esp_audio_pcm_write(pcm, buffer, len, 20);
 - 应用需先连 **WiFi**，再调用 `esp_audio_pcm_open()`。
 - menuconfig 中配置 **PC monitor server IP** 与端口（默认 **8766**）。
 - PC 停止 Server 后再启动：**TCP** 设备会在下次发 PCM 时自动重连；**UDP** 一般无需重启设备。
+- **TCP 发送缓冲**：有 PSRAM 时默认约 **1 MiB** 环形缓冲 + 后台发送任务，缓解 WiFi 拥塞导致的丢样；menuconfig `TCP TX ring buffer size` 可调。
 
 网络相关 menuconfig（选 TCP/UDP 时出现）：
 
@@ -53,6 +54,7 @@ esp_audio_pcm_write(pcm, buffer, len, 20);
 |--------|------|
 | `PC monitor server IP` | 运行 pcm_monitor 的 PC 局域网 IPv4 |
 | `TCP server port` / `UDP PCM port` | 与网页监听端口一致（默认 8766） |
+| `TCP TX ring buffer size` | TCP 发送环形缓冲（默认 1048576 B，优先 PSRAM） |
 | `UDP local bind port` | `0` 表示自动分配（同 socket 收控制命令） |
 
 ### 控制命令格式（文本，一行一条）

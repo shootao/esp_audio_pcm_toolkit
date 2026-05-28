@@ -46,6 +46,7 @@ esp_audio_pcm_write(pcm, buffer, len, 20);
 - Application must bring up **WiFi** (and `app_net_init()` or equivalent) before `esp_audio_pcm_open()`.
 - Set **PC monitor server IP** and port in menuconfig (default PCM port **8766**).
 - TCP reconnects automatically on the next `esp_audio_pcm_write()` after the PC server restarts.
+- **TCP TX buffer**: ~**1 MiB** ring in PSRAM (when available) plus a background send task to smooth WiFi backpressure; tune via menuconfig `TCP TX ring buffer size`.
 
 Network menuconfig keys (when TCP or UDP is selected):
 
@@ -53,6 +54,7 @@ Network menuconfig keys (when TCP or UDP is selected):
 |--------|---------|
 | `PC monitor server IP` | IPv4 of the PC running pcm_monitor |
 | `TCP server port` / `UDP PCM port` | Must match the port in the web UI (default 8766) |
+| `TCP TX ring buffer size` | TCP send ring (default 1048576 B, prefers PSRAM) |
 | `UDP local bind port` | `0` = auto (receive control on same socket) |
 
 ### Control command format (text, one line)
