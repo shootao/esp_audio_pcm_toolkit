@@ -72,7 +72,12 @@ Commands are read from the transport RX path and dispatched via callbacks. Respo
 
 See [`tools/pcm_monitor/README.md`](./tools/pcm_monitor/README.md).
 
-Windows: double-click `tools/pcm_monitor/start_monitor.bat`.
+![PCM Monitor Dashboard](./tools/pcm_monitor/__static/esp_pcm_monitor.png)
+
+*Web UI on PC: Serial / TCP / UDP PCM capture, multi-channel waveforms, live listen, WAV export, remote volume/gain control.*
+
+Windows: double-click `tools/pcm_monitor/start_monitor.bat`.  
+Linux / macOS: `tools/pcm_monitor/start_monitor.sh`
 
 | Transport (web UI) | PC role | Connect action |
 |--------------------|---------|----------------|
@@ -83,7 +88,7 @@ In the web **Device control** panel, adjust volume/gain then click **Apply to de
 
 ## Example
 
-[`examples/basic_example/`](./examples/basic_example/) — Hi Nomi BSP + `esp_codec_dev` record, PCM stream, remote control.
+[`examples/basic_example/`](./examples/basic_example/) — board-agnostic dummy PCM + remote control (no BSP required).
 
 ```bash
 cd examples/basic_example && idf.py build flash monitor

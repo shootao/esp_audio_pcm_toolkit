@@ -98,7 +98,7 @@ esp_err_t esp_audio_pcm_ctrl_start(esp_audio_pcm_handle_t io, const esp_audio_pc
 
     io->ctrl_cbs = *cbs;
     io->ctrl_running = true;
-    if (xTaskCreate(esp_audio_pcm_ctrl_task, "esp_audio_pcm_ctrl", 3072, io, 4, &io->ctrl_task) != pdPASS) {
+    if (xTaskCreate(esp_audio_pcm_ctrl_task, "esp_audio_pcm_ctrl", 4096, io, 4, &io->ctrl_task) != pdPASS) {
         io->ctrl_running = false;
         return ESP_ERR_NO_MEM;
     }

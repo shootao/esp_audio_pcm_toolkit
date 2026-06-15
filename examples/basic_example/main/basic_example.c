@@ -1,75 +1,44 @@
 /*
- * SPDX-FileCopyrightText: 2025 Espressif Systems (Shanghai) CO., LTD
+ * SPDX-FileCopyrightText: 2025-2026 Espressif Systems (Shanghai) CO., LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <math.h>
 #include <stdint.h>
 #include <string.h>
 
-#include "board.h"
-#include "driver/i2s_std.h"
 #include "esp_audio_pcm.h"
-#include "esp_codec_dev.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "net_init.h"
 #include "sdkconfig.h"
 
 #define TAG                     "basic_example"
 
 #define SAMPLE_RATE_HZ          16000
-#define PLAY_BITS               16
-#define PLAY_CHANNELS           1
 #define RECORD_BITS             16
 #define MIC_GAIN_CH_MAX         4
 #define MIC_GAIN_DB_MAX         36.5f
 #define RECORD_CHUNK_SAMPLES    256
 #define RECORD_CHUNK_BYTES      (RECORD_CHUNK_SAMPLES * CONFIG_BASIC_EXAMPLE_RECORD_CHANNELS * (RECORD_BITS / 8))
 
+#define SINE_AMP_BASE           12000
+#define PLAY_SQ_FREQ_HZ         440
+#define PLAY_SQ_AMP_MAX         16000
+
+/* Per-mic sine frequencies (Hz) — distinct on PC monitor waveform */
+static const int s_mic_freq_hz[MIC_GAIN_CH_MAX] = { 220, 440, 660, 880 };
+
 typedef struct {
     esp_audio_pcm_handle_t pcm;
-    esp_codec_dev_handle_t play_dev;
-    esp_codec_dev_handle_t record_dev;
     int play_vol;
     float mic_gain_db[MIC_GAIN_CH_MAX];
-    bool use_codec;
+    volatile bool play_running;
 } app_state_t;
 
 static app_state_t s_app;
-
-static esp_codec_dev_sample_info_t play_sample_info(void)
-{
-    return (esp_codec_dev_sample_info_t) {
-        .sample_rate = SAMPLE_RATE_HZ,
-        .channel = PLAY_CHANNELS,
-        .bits_per_sample = PLAY_BITS,
-        .channel_mask = ESP_CODEC_DEV_MAKE_CHANNEL_MASK(0),
-        .mclk_multiple = I2S_MCLK_MULTIPLE_256,
-    };
-}
-
-static esp_codec_dev_sample_info_t record_sample_info(void)
-{
-    esp_codec_dev_sample_info_t fs = {
-        .sample_rate = SAMPLE_RATE_HZ,
-        .channel = 4,
-        .bits_per_sample = RECORD_BITS,
-        .mclk_multiple = I2S_MCLK_MULTIPLE_256,
-    };
-
-#if CONFIG_BASIC_EXAMPLE_RECORD_CHANNELS == 3
-    fs.channel_mask = ESP_CODEC_DEV_MAKE_CHANNEL_MASK(0)
-                      | ESP_CODEC_DEV_MAKE_CHANNEL_MASK(1)
-                      | ESP_CODEC_DEV_MAKE_CHANNEL_MASK(2);
-#else
-    fs.channel_mask = ESP_CODEC_DEV_MAKE_CHANNEL_MASK(0)
-                      | ESP_CODEC_DEV_MAKE_CHANNEL_MASK(1)
-                      | ESP_CODEC_DEV_MAKE_CHANNEL_MASK(2)
-                      | ESP_CODEC_DEV_MAKE_CHANNEL_MASK(3);
-#endif
-    return fs;
-}
 
 static float clamp_mic_gain_db(float db)
 {
@@ -82,6 +51,11 @@ static float clamp_mic_gain_db(float db)
     return db;
 }
 
+static float db_to_linear(float db)
+{
+    return powf(10.0f, db / 20.0f);
+}
+
 static void init_mic_gain_defaults(void)
 {
     for (int i = 0; i < MIC_GAIN_CH_MAX; i++) {
@@ -89,33 +63,49 @@ static void init_mic_gain_defaults(void)
     }
 }
 
-static int active_mic_channel_count(void)
+static const char *pcm_transport_name(esp_audio_pcm_transport_t type)
 {
-#if CONFIG_BASIC_EXAMPLE_RECORD_CHANNELS == 3
-    return 3;
-#else
-    return 4;
-#endif
+    switch (type) {
+    case ESP_AUDIO_PCM_TRANSPORT_UART:
+        return "UART";
+    case ESP_AUDIO_PCM_TRANSPORT_TCP:
+        return "TCP";
+    case ESP_AUDIO_PCM_TRANSPORT_UDP:
+        return "UDP";
+    default:
+        return "USB";
+    }
 }
 
-static void apply_mic_gain(esp_codec_dev_handle_t record_dev)
+#if CONFIG_ESP_AUDIO_PCM_TRANSPORT_TCP
+static void log_pcm_network_target(void)
 {
-    if (record_dev == NULL) {
-        return;
-    }
+    ESP_LOGI(TAG, "PCM TCP -> %s:%d", CONFIG_ESP_AUDIO_PCM_NET_SERVER_IP, CONFIG_ESP_AUDIO_PCM_TCP_PORT);
+}
+#elif CONFIG_ESP_AUDIO_PCM_TRANSPORT_UDP
+static void log_pcm_network_target(void)
+{
+    ESP_LOGI(TAG, "PCM UDP -> %s:%d (local port %d)",
+             CONFIG_ESP_AUDIO_PCM_NET_SERVER_IP,
+             CONFIG_ESP_AUDIO_PCM_UDP_PCM_PORT,
+             CONFIG_ESP_AUDIO_PCM_UDP_LOCAL_PORT);
+}
+#else
+static void log_pcm_network_target(void)
+{
+}
+#endif
 
-    float max_gain = 0.0f;
-    const int mic_count = active_mic_channel_count();
-
-    for (int i = 0; i < mic_count; i++) {
-        esp_codec_dev_set_in_channel_gain(record_dev,
-                                          ESP_CODEC_DEV_MAKE_CHANNEL_MASK(i),
-                                          s_app.mic_gain_db[i]);
-        if (s_app.mic_gain_db[i] > max_gain) {
-            max_gain = s_app.mic_gain_db[i];
-        }
-    }
-    esp_codec_dev_set_in_gain(record_dev, max_gain);
+static void configure_pcm_logging(void)
+{
+#if CONFIG_ESP_AUDIO_PCM_TRANSPORT_USB
+    /*
+     * USB Serial/JTAG carries PCM. Console defaults to UART0 (sdkconfig.defaults),
+     * so ESP_LOG on UART is OK. If Console is moved to USB, set ESP_LOG_NONE here.
+     */
+#elif CONFIG_ESP_AUDIO_PCM_TRANSPORT_UART
+    esp_log_level_set("*", ESP_LOG_NONE);
+#endif
 }
 
 static void set_playback_volume(int vol)
@@ -127,11 +117,7 @@ static void set_playback_volume(int vol)
         vol = 100;
     }
     s_app.play_vol = vol;
-
-    if (s_app.play_dev != NULL) {
-        esp_codec_dev_set_out_vol(s_app.play_dev, s_app.play_vol);
-    }
-    ESP_LOGI(TAG, "Playback volume -> %d", s_app.play_vol);
+    ESP_LOGI(TAG, "Playback volume -> %d (square-wave sim, no DAC)", s_app.play_vol);
 }
 
 static void set_mic_gain_channel(int ch, float db)
@@ -140,13 +126,7 @@ static void set_mic_gain_channel(int ch, float db)
         return;
     }
     s_app.mic_gain_db[ch] = clamp_mic_gain_db(db);
-
-    if (s_app.record_dev != NULL) {
-        esp_codec_dev_set_in_channel_gain(s_app.record_dev,
-                                          ESP_CODEC_DEV_MAKE_CHANNEL_MASK(ch),
-                                          s_app.mic_gain_db[ch]);
-    }
-    ESP_LOGI(TAG, "Mic Ch%d gain -> %.1f dB", ch, (double)s_app.mic_gain_db[ch]);
+    ESP_LOGI(TAG, "Mic Ch%d gain -> %.1f dB (sine tone amplitude)", ch, (double)s_app.mic_gain_db[ch]);
 }
 
 static void set_mic_gain_all(float db)
@@ -155,7 +135,6 @@ static void set_mic_gain_all(float db)
     for (int i = 0; i < MIC_GAIN_CH_MAX; i++) {
         s_app.mic_gain_db[i] = db;
     }
-    apply_mic_gain(s_app.record_dev);
     ESP_LOGI(TAG, "Mic gain (all) -> %.1f dB", (double)db);
 }
 
@@ -184,105 +163,93 @@ static void on_stream(void *ctx, bool enabled)
     ESP_LOGI(TAG, "PCM stream -> %s", enabled ? "on" : "off");
 }
 
-static void fill_dummy_pcm(int16_t *samples, int frame_count, uint32_t *phase)
+static void fill_sine_pcm(const app_state_t *app, int16_t *samples, int frame_count, uint32_t *sample_ix)
 {
     const int channels = CONFIG_BASIC_EXAMPLE_RECORD_CHANNELS;
 
     for (int i = 0; i < frame_count; i++) {
+        const float t = (float)(*sample_ix) / (float)SAMPLE_RATE_HZ;
+        (*sample_ix)++;
+
         for (int ch = 0; ch < channels; ch++) {
-            uint32_t p = phase[ch]++;
-            int32_t amp = 4000 + ch * 1500;
-            samples[i * channels + ch] = (int16_t)((p & 0xFF) * amp / 128 - amp / 2);
+            const float gain = db_to_linear(app->mic_gain_db[ch]);
+            float amp = (float)SINE_AMP_BASE * gain;
+            if (amp > 30000.0f) {
+                amp = 30000.0f;
+            }
+            const float rad = 2.0f * (float)M_PI * (float)s_mic_freq_hz[ch] * t;
+            samples[i * channels + ch] = (int16_t)(sinf(rad) * amp);
         }
     }
-}
-
-static esp_err_t open_playback_codec(void)
-{
-    if (s_app.play_dev == NULL) {
-        return ESP_ERR_INVALID_STATE;
-    }
-
-    esp_codec_dev_sample_info_t fs = play_sample_info();
-    if (esp_codec_dev_open(s_app.play_dev, &fs) != ESP_CODEC_DEV_OK) {
-        ESP_LOGE(TAG, "esp_codec_dev_open(play) failed");
-        return ESP_FAIL;
-    }
-    esp_codec_dev_set_out_vol(s_app.play_dev, s_app.play_vol);
-    return ESP_OK;
 }
 
 static void record_task(void *arg)
 {
     app_state_t *app = (app_state_t *)arg;
     uint8_t buffer[RECORD_CHUNK_BYTES];
-    uint32_t phase[MIC_GAIN_CH_MAX] = {0};
-    uint32_t chunk_count = 0;
+    uint32_t sample_ix = 0;
 
-    if (app->use_codec && app->record_dev != NULL) {
-        esp_codec_dev_sample_info_t fs = record_sample_info();
-        if (esp_codec_dev_open(app->record_dev, &fs) != ESP_CODEC_DEV_OK) {
-            ESP_LOGE(TAG, "esp_codec_dev_open(record) failed, fallback to dummy PCM");
-            app->use_codec = false;
-        } else {
-            apply_mic_gain(app->record_dev);
-            ESP_LOGI(TAG, "Recording %d ch @ %d Hz via esp_codec_dev_read",
-                     CONFIG_BASIC_EXAMPLE_RECORD_CHANNELS, SAMPLE_RATE_HZ);
-        }
-    }
-
-    if (!app->use_codec) {
-        ESP_LOGW(TAG, "Dummy PCM: %d Hz / %d ch (no codec)", SAMPLE_RATE_HZ,
-                 CONFIG_BASIC_EXAMPLE_RECORD_CHANNELS);
-    }
-
-    ESP_LOGI(TAG, "PC monitor: Channels=%d, Rate=%d",
-             CONFIG_BASIC_EXAMPLE_RECORD_CHANNELS, SAMPLE_RATE_HZ);
+    ESP_LOGI(TAG, "Record: %d-ch sine @ %d,%d,%d,%d Hz (first %d ch)",
+             CONFIG_BASIC_EXAMPLE_RECORD_CHANNELS,
+             s_mic_freq_hz[0], s_mic_freq_hz[1], s_mic_freq_hz[2], s_mic_freq_hz[3],
+             CONFIG_BASIC_EXAMPLE_RECORD_CHANNELS);
 
     while (true) {
-        if (app->use_codec && app->record_dev != NULL) {
-            if (esp_codec_dev_read(app->record_dev, buffer, sizeof(buffer)) != ESP_CODEC_DEV_OK) {
-                vTaskDelay(pdMS_TO_TICKS(10));
-                continue;
-            }
-        } else {
-            fill_dummy_pcm((int16_t *)buffer, RECORD_CHUNK_SAMPLES, phase);
-            vTaskDelay(pdMS_TO_TICKS(16));
-        }
+        fill_sine_pcm(app, (int16_t *)buffer, RECORD_CHUNK_SAMPLES, &sample_ix);
+        vTaskDelay(pdMS_TO_TICKS(16));
 
         if (app->pcm != NULL && esp_audio_pcm_get_stream_enabled(app->pcm)) {
             esp_audio_pcm_write(app->pcm, buffer, sizeof(buffer), 20);
         }
-
-        if (++chunk_count % 64 == 0) {
-            ESP_LOGI(TAG, "Streaming vol=%d ch0_gain=%.1f dB codec=%d",
-                     app->play_vol, (double)app->mic_gain_db[0], app->use_codec);
-        }
     }
+}
+
+/**
+ * Software playback: square wave at PLAY_SQ_FREQ_HZ, amplitude from play_vol.
+ * No I2S/DAC — replace the body with esp_codec_dev_write() when you add hardware.
+ */
+static void play_task(void *arg)
+{
+    app_state_t *app = (app_state_t *)arg;
+    const int delay_ms = 1000 / (PLAY_SQ_FREQ_HZ * 2);
+    bool high = true;
+
+    ESP_LOGI(TAG, "Play sim: %d Hz square, vol=%d (no DAC)", PLAY_SQ_FREQ_HZ, app->play_vol);
+
+    while (app->play_running) {
+        const float vol = app->play_vol / 100.0f;
+        const int16_t sample = high
+                                   ? (int16_t)(PLAY_SQ_AMP_MAX * vol)
+                                   : (int16_t)(-PLAY_SQ_AMP_MAX * vol);
+        (void)sample;
+
+        high = !high;
+        vTaskDelay(pdMS_TO_TICKS(delay_ms));
+    }
+
+    vTaskDelete(NULL);
 }
 
 void app_main(void)
 {
     memset(&s_app, 0, sizeof(s_app));
     s_app.play_vol = CONFIG_BASIC_EXAMPLE_DEFAULT_PLAY_VOL;
+    s_app.play_running = true;
     init_mic_gain_defaults();
 
-    audio_board_init();
-    s_app.play_dev = audio_board_get_play_dev_handle();
-    s_app.record_dev = audio_board_get_record_dev_handle();
-    s_app.use_codec = (s_app.play_dev != NULL && s_app.record_dev != NULL);
-
-    if (s_app.use_codec) {
-        if (open_playback_codec() != ESP_OK) {
-            ESP_LOGW(TAG, "Playback codec open failed");
-        }
-    } else {
-        ESP_LOGW(TAG, "Board codec unavailable, using dummy PCM only");
-    }
+    configure_pcm_logging();
 
     esp_audio_pcm_config_t cfg = esp_audio_pcm_config_default();
     ESP_ERROR_CHECK(esp_audio_pcm_new(&cfg, &s_app.pcm));
-    ESP_ERROR_CHECK(esp_audio_pcm_open(s_app.pcm));
+    ESP_ERROR_CHECK(app_net_init());
+
+    esp_err_t open_ret = esp_audio_pcm_open(s_app.pcm);
+    if (open_ret != ESP_OK) {
+        ESP_LOGE(TAG, "esp_audio_pcm_open failed: %s (transport=%s)",
+                 esp_err_to_name(open_ret), pcm_transport_name(cfg.type));
+        ESP_LOGE(TAG, "UDP/TCP: check PC monitor server IP/port; run idf.py fullclean build");
+    }
+    ESP_ERROR_CHECK(open_ret);
     esp_audio_pcm_set_stream_enabled(s_app.pcm, true);
 
     const esp_audio_pcm_ctrl_cbs_t cbs = {
@@ -294,9 +261,14 @@ void app_main(void)
     };
     ESP_ERROR_CHECK(esp_audio_pcm_ctrl_start(s_app.pcm, &cbs));
 
-    ESP_LOGI(TAG, "Transport: %s | Logs: UART0",
-             esp_audio_pcm_get_type(s_app.pcm) == ESP_AUDIO_PCM_TRANSPORT_UART ? "UART" : "USB");
+    ESP_LOGI(TAG, "Transport: %s", pcm_transport_name(esp_audio_pcm_get_type(s_app.pcm)));
+    log_pcm_network_target();
     ESP_LOGI(TAG, "Remote cmd: vol / gain / gch / stream");
+#if CONFIG_ESP_AUDIO_PCM_TRANSPORT_USB || CONFIG_ESP_AUDIO_PCM_TRANSPORT_UART
+    ESP_LOGI(TAG, "PC monitor: Channels=%d Rate=%d; UART baud=%d if hardware UART",
+             CONFIG_BASIC_EXAMPLE_RECORD_CHANNELS, SAMPLE_RATE_HZ, CONFIG_ESP_AUDIO_PCM_UART_BAUD);
+#endif
 
-    xTaskCreate(record_task, "record_task", 8192, &s_app, 5, NULL);
+    xTaskCreate(play_task, "play_task", 3072, &s_app, 4, NULL);
+    xTaskCreate(record_task, "record_task", 4096, &s_app, 5, NULL);
 }

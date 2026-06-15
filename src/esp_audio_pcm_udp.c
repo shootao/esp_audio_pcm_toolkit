@@ -11,6 +11,8 @@
 
 #include "esp_check.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include "lwip/netdb.h"
 #include "lwip/sockets.h"
 
@@ -22,11 +24,25 @@ typedef struct {
     int sock;
     struct sockaddr_in server_addr;
     bool server_addr_set;
+    SemaphoreHandle_t sock_mux;
 } udp_ctx_t;
 
 static udp_ctx_t *udp_ctx(esp_audio_pcm_handle_t io)
 {
     return (udp_ctx_t *)io->transport_ctx;
+}
+
+/* PCM send (record task) and control recv (ctrl task) share one UDP socket;
+ * serialize all socket syscalls to avoid lwIP heap corruption. */
+static int udp_get_sock(udp_ctx_t *ctx)
+{
+    int sock = -1;
+    if (ctx != NULL && ctx->sock_mux != NULL &&
+        xSemaphoreTake(ctx->sock_mux, portMAX_DELAY) == pdTRUE) {
+        sock = ctx->sock;
+        xSemaphoreGive(ctx->sock_mux);
+    }
+    return sock;
 }
 
 static esp_err_t udp_resolve_server(esp_audio_pcm_handle_t io)
@@ -63,6 +79,11 @@ static esp_err_t udp_init(esp_audio_pcm_handle_t io)
         return ESP_ERR_NO_MEM;
     }
     ctx->sock = -1;
+    ctx->sock_mux = xSemaphoreCreateMutex();
+    if (ctx->sock_mux == NULL) {
+        free(ctx);
+        return ESP_ERR_NO_MEM;
+    }
     io->transport_ctx = ctx;
     return ESP_OK;
 }
@@ -73,9 +94,15 @@ static esp_err_t udp_deinit(esp_audio_pcm_handle_t io)
     if (ctx == NULL) {
         return ESP_OK;
     }
-    if (ctx->sock >= 0) {
-        close(ctx->sock);
-        ctx->sock = -1;
+    if (ctx->sock_mux != NULL) {
+        xSemaphoreTake(ctx->sock_mux, portMAX_DELAY);
+        if (ctx->sock >= 0) {
+            close(ctx->sock);
+            ctx->sock = -1;
+        }
+        xSemaphoreGive(ctx->sock_mux);
+        vSemaphoreDelete(ctx->sock_mux);
+        ctx->sock_mux = NULL;
     }
     free(ctx);
     io->transport_ctx = NULL;
@@ -87,16 +114,31 @@ static esp_err_t udp_open(esp_audio_pcm_handle_t io)
     const esp_audio_pcm_udp_config_t *cfg = &io->config.udp;
     udp_ctx_t *ctx = udp_ctx(io);
 
+    if (ctx == NULL) {
+        ESP_LOGE(TAG, "UDP transport context missing; call esp_audio_pcm_new() first");
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    ESP_RETURN_ON_ERROR(udp_resolve_server(io), TAG, "resolve server failed");
+
+    if (ctx->sock_mux == NULL) {
+        ctx->sock_mux = xSemaphoreCreateMutex();
+        if (ctx->sock_mux == NULL) {
+            return ESP_ERR_NO_MEM;
+        }
+        ESP_LOGW(TAG, "UDP socket mutex was missing; created lazily (fullclean rebuild advised)");
+    }
+
+    xSemaphoreTake(ctx->sock_mux, portMAX_DELAY);
     if (ctx->sock >= 0) {
         close(ctx->sock);
         ctx->sock = -1;
     }
 
-    ESP_RETURN_ON_ERROR(udp_resolve_server(io), TAG, "resolve server failed");
-
     ctx->sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
     if (ctx->sock < 0) {
         ESP_LOGE(TAG, "socket() failed: errno %d", errno);
+        xSemaphoreGive(ctx->sock_mux);
         return ESP_FAIL;
     }
 
@@ -109,8 +151,10 @@ static esp_err_t udp_open(esp_audio_pcm_handle_t io)
         ESP_LOGE(TAG, "bind(local_port=%u) failed: errno %d", (unsigned)cfg->local_port, errno);
         close(ctx->sock);
         ctx->sock = -1;
+        xSemaphoreGive(ctx->sock_mux);
         return ESP_FAIL;
     }
+    xSemaphoreGive(ctx->sock_mux);
 
     ESP_LOGI(TAG, "UDP ready -> %s:%u (local port %u)",
              cfg->server_ip, (unsigned)cfg->pcm_port, (unsigned)cfg->local_port);
@@ -120,29 +164,50 @@ static esp_err_t udp_open(esp_audio_pcm_handle_t io)
 static esp_err_t udp_close(esp_audio_pcm_handle_t io)
 {
     udp_ctx_t *ctx = udp_ctx(io);
-    if (ctx != NULL && ctx->sock >= 0) {
+    if (ctx == NULL || ctx->sock_mux == NULL) {
+        return ESP_OK;
+    }
+
+    xSemaphoreTake(ctx->sock_mux, portMAX_DELAY);
+    if (ctx->sock >= 0) {
         close(ctx->sock);
         ctx->sock = -1;
     }
+    xSemaphoreGive(ctx->sock_mux);
     return ESP_OK;
 }
 
 static int udp_read(esp_audio_pcm_handle_t io, void *buf, size_t len, uint32_t timeout_ms)
 {
     udp_ctx_t *ctx = udp_ctx(io);
-    if (ctx == NULL || ctx->sock < 0 || buf == NULL || len == 0) {
+    if (ctx == NULL || ctx->sock_mux == NULL || buf == NULL || len == 0) {
         return -1;
     }
 
-    struct timeval tv = {
-        .tv_sec = timeout_ms / 1000,
-        .tv_usec = (timeout_ms % 1000) * 1000,
-    };
-    setsockopt(ctx->sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    int sock = udp_get_sock(ctx);
+    if (sock < 0) {
+        return -1;
+    }
 
-    struct sockaddr_in from;
-    socklen_t from_len = sizeof(from);
-    int n = recvfrom(ctx->sock, buf, len, 0, (struct sockaddr *)&from, &from_len);
+    uint32_t socket_timeout_ms = timeout_ms == 0 ? 1 : timeout_ms;
+    struct timeval tv = {
+        .tv_sec = socket_timeout_ms / 1000,
+        .tv_usec = (socket_timeout_ms % 1000) * 1000,
+    };
+
+    int n = -1;
+    if (xSemaphoreTake(ctx->sock_mux, pdMS_TO_TICKS(200)) != pdTRUE) {
+        return 0;
+    }
+    if (ctx->sock == sock) {
+        setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+
+        struct sockaddr_in from;
+        socklen_t from_len = sizeof(from);
+        n = recvfrom(sock, buf, len, 0, (struct sockaddr *)&from, &from_len);
+    }
+    xSemaphoreGive(ctx->sock_mux);
+
     if (n > 0) {
         return n;
     }
@@ -158,13 +223,23 @@ static int udp_read(esp_audio_pcm_handle_t io, void *buf, size_t len, uint32_t t
 static int udp_write(esp_audio_pcm_handle_t io, const void *data, size_t len, uint32_t timeout_ms)
 {
     udp_ctx_t *ctx = udp_ctx(io);
-    if (ctx == NULL || ctx->sock < 0 || !ctx->server_addr_set || data == NULL || len == 0) {
+    if (ctx == NULL || ctx->sock_mux == NULL || !ctx->server_addr_set || data == NULL || len == 0) {
         return -1;
     }
 
     (void)timeout_ms;
-    int n = sendto(ctx->sock, data, len, 0,
+
+    int n = -1;
+    if (xSemaphoreTake(ctx->sock_mux, pdMS_TO_TICKS(200)) != pdTRUE) {
+        errno = EAGAIN;
+        return -1;
+    }
+    if (ctx->sock >= 0) {
+        n = sendto(ctx->sock, data, len, 0,
                    (struct sockaddr *)&ctx->server_addr, sizeof(ctx->server_addr));
+    }
+    xSemaphoreGive(ctx->sock_mux);
+
     if (n < 0) {
         ESP_LOGW(TAG, "UDP sendto failed: errno %d", errno);
         return -1;

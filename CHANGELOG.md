@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.2.4
+
+### Features
+
+- TCP: **drop counters and `ESP_LOGW`** on ring overflow (`esp_audio_pcm_tcp` tag); session summary on deinit
+- Kconfig `ESP_AUDIO_PCM_TCP_BLOCK_ON_FULL` (default on): block producer when TX ring is full instead of dropping PCM
+- `esp_audio_pcm_write`: fix partial-write retry (advance offset, no duplicate PCM in ring)
+
 ## v0.2.3
 
 ### Features

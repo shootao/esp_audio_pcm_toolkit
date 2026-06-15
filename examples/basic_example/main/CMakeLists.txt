@@ -1,3 +1,3 @@
-idf_component_register(SRCS "basic_example.c" "board.c"
+idf_component_register(SRCS "basic_example.c" "net_init.c"
                        INCLUDE_DIRS "."
-                       REQUIRES esp_audio_pcm_toolkit hi_nomi_board esp_codec_dev)
+                       REQUIRES esp_audio_pcm_toolkit esp_wifi esp_netif nvs_flash esp_event)

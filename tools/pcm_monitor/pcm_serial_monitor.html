@@ -6,657 +6,1081 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
-  <title>Audio PCM Monitor</title>
+  <title>PCM Monitor Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --esp-red: #e7352c;
-      --esp-red-dark: #c42e26;
-      --esp-red-light: #fef2f2;
-      --bg: #eef0f4;
-      --panel: #ffffff;
-      --text: #1a1a2e;
-      --muted: #64748b;
-      --accent: var(--esp-red);
-      --wave-bg: #e8ecf4;
-      --wave-line: #2563eb;
-      --wave-center: #94a3b8;
-      --border: #e2e8f0;
-      --shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 4px 16px rgba(15, 23, 42, 0.04);
-      --radius: 12px;
+      --background: #f8f9fa;
+      --surface: #f8f9fa;
+      --surface-container-lowest: #ffffff;
+      --surface-container-low: #f3f4f5;
+      --surface-container: #edeeef;
+      --surface-container-high: #e7e8e9;
+      --on-surface: #191c1d;
+      --on-surface-variant: #5c403c;
+      --outline: #916f6b;
+      --outline-variant: #e5bdb8;
+      --primary: #b90c10;
+      --primary-container: #de2e26;
+      --on-primary-container: #fffbff;
+      --secondary: #4e6073;
+      --secondary-container: #cfe2f9;
+      --tertiary: #006387;
+      --tertiary-container: #007da9;
+      --error: #ba1a1a;
+      --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --sans: 'Inter', 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+      --sidebar-width: 320px;
+      --radius-xl: 12px;
+      --radius-lg: 8px;
+      --radius-sm: 6px;
+      --shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 2px 8px rgba(0, 0, 0, 0.05);
     }
 
     * { box-sizing: border-box; }
 
     body {
       margin: 0;
-      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
-      background: var(--bg);
-      color: var(--text);
+      font-family: var(--sans);
+      font-size: 14px;
+      line-height: 1.43;
+      background: var(--background);
+      color: var(--on-surface);
       min-height: 100vh;
       display: flex;
       flex-direction: column;
     }
 
-    /* ── Header ── */
-    .site-header {
-      background: #fff;
-      border-bottom: 3px solid var(--esp-red);
-      box-shadow: var(--shadow);
-      padding: 14px 24px;
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      vertical-align: middle;
+      font-size: 20px;
+      line-height: 1;
+    }
+
+    .waveform-bg {
+      background-image:
+        linear-gradient(to right, #e5e7eb 1px, transparent 1px),
+        linear-gradient(to bottom, #e5e7eb 1px, transparent 1px);
+      background-size: 20px 20px;
+    }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 10px; }
+    ::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+
+    input[type="range"] { accent-color: var(--primary); }
+
+    /* ── Top bar (Stitch TopNavBar) ── */
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
       display: flex;
       align-items: center;
-      gap: 20px;
+      justify-content: space-between;
+      gap: 16px;
       flex-wrap: wrap;
+      background: var(--surface);
+      border-bottom: 1px solid var(--outline-variant);
+      box-shadow: var(--shadow);
+      padding: 8px 24px;
     }
 
-    .brand-logo {
-      height: 26px;
-      width: auto;
-      flex-shrink: 0;
-    }
-
-    .header-main {
-      flex: 1;
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
       min-width: 200px;
     }
 
-    .header-main h1 {
-      margin: 0;
-      font-size: 1.25rem;
-      font-weight: 600;
-      color: var(--text);
+    .brand-logo { height: 22px; width: auto; flex-shrink: 0; }
+
+    .brand-title {
+      font-family: var(--mono);
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--primary);
       letter-spacing: -0.02em;
     }
 
     .page-version {
-      font-size: 0.72rem;
+      font-family: var(--mono);
+      font-size: 10px;
       font-weight: 500;
-      color: var(--muted);
-      margin-left: 6px;
+      color: var(--on-surface-variant);
+      opacity: 0.6;
+      margin-left: 8px;
     }
 
-    .header-sub {
-      margin: 4px 0 0;
-      font-size: 0.85rem;
-      color: var(--muted);
-      line-height: 1.4;
+    .brand-sub {
+      font-size: 12px;
+      color: var(--on-surface-variant);
+      margin-top: 2px;
     }
 
-    .site-footer {
-      text-align: center;
-      padding: 12px 20px;
-      font-size: 0.72rem;
-      color: var(--muted);
-      border-top: 1px solid var(--border);
-      background: #fff;
-      margin-top: auto;
-    }
+    .pills { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 
-    /* ── Layout ── */
-    .wrap {
-      max-width: 1140px;
-      margin: 0 auto;
-      padding: 20px 24px 28px;
-      width: 100%;
-    }
-
-    .panel {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 18px 20px;
-      margin-bottom: 16px;
-      box-shadow: var(--shadow);
-    }
-
-    .panel-title {
-      font-size: 0.78rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--esp-red);
-      margin: 0 0 14px;
-      padding-bottom: 10px;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-      gap: 12px;
-    }
-
-    label {
-      display: flex;
-      flex-direction: column;
-      gap: 5px;
-      font-size: 0.8rem;
-      font-weight: 500;
-      color: var(--muted);
-    }
-
-    input, select {
-      padding: 8px 11px;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      font-size: 0.92rem;
-      background: #fff;
-      color: var(--text);
-      transition: border-color 0.15s, box-shadow 0.15s;
-    }
-
-    input:focus, select:focus {
-      outline: none;
-      border-color: var(--esp-red);
-      box-shadow: 0 0 0 3px rgba(231, 53, 44, 0.12);
-    }
-
-    .port-row {
-      display: grid;
-      grid-template-columns: 1fr 120px auto auto;
-      gap: 12px;
-      align-items: end;
-    }
-
-    #serialPortPanel[hidden] {
-      display: none !important;
-    }
-
-    #localIpWrap[hidden] {
-      display: none !important;
-    }
-
-    /* ── Buttons ── */
-    .btn-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 16px;
-    }
-
-    button {
-      border: 0;
-      border-radius: 8px;
-      padding: 9px 16px;
-      font-size: 0.88rem;
-      font-weight: 500;
-      cursor: pointer;
-      background: var(--esp-red);
-      color: #fff;
-      transition: background 0.15s, transform 0.1s;
-    }
-
-    button:hover:not(:disabled) {
-      background: var(--esp-red-dark);
-    }
-
-    button:active:not(:disabled) {
-      transform: scale(0.98);
-    }
-
-    button.secondary {
-      background: #fff;
-      color: var(--text);
-      border: 1px solid var(--border);
-    }
-
-    button.secondary:hover:not(:disabled) {
-      background: #f8fafc;
-      border-color: #cbd5e1;
-    }
-
-    button.btn-apply {
-      background: var(--esp-red);
-      color: #fff;
-      border: 1px solid var(--esp-red-dark);
-      font-weight: 600;
-      box-shadow: 0 1px 2px rgba(231, 53, 44, 0.25);
-    }
-
-    button.btn-apply:hover:not(:disabled) {
-      background: var(--esp-red-dark);
-      border-color: #a82820;
-    }
-
-    button.danger {
-      background: #fff;
-      color: #b45309;
-      border: 1px solid #fcd34d;
-    }
-
-    button.danger:hover:not(:disabled) {
-      background: #fffbeb;
-    }
-
-    button:disabled {
-      opacity: 0.45;
-      cursor: not-allowed;
-    }
-
-    /* ── Stats ── */
-    .stats-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-      gap: 10px;
-      margin-top: 16px;
-    }
-
-    .stat-card {
-      background: #f8fafc;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 10px 12px;
-    }
-
-    .stat-card .label {
-      font-size: 0.72rem;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      margin-bottom: 4px;
-    }
-
-    .stat-card .value {
-      font-size: 1rem;
-      font-weight: 600;
-      color: var(--text);
-    }
-
-    .stat-card.status-connected .value { color: #16a34a; }
-    .stat-card.status-disconnected .value { color: var(--muted); }
-
-    .meter-bar {
-      height: 6px;
-      background: #e2e8f0;
-      border-radius: 999px;
-      overflow: hidden;
-      margin-top: 12px;
-    }
-
-    .meter-fill {
-      height: 100%;
-      width: 0%;
-      background: linear-gradient(90deg, #f87171, var(--esp-red));
-      transition: width 60ms linear;
-      border-radius: 999px;
-    }
-
-    /* ── Waveform ── */
-    .wave-panel {
-      padding: 0;
-      overflow: hidden;
-      cursor: crosshair;
-    }
-
-    .wave-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 12px 18px;
-      border-bottom: 1px solid var(--border);
-      background: linear-gradient(180deg, #f8fafc, #f1f5f9);
-      font-size: 0.9rem;
-      font-weight: 500;
-    }
-
-    .wave-toolbar {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      align-items: center;
-      padding: 8px 18px;
-      border-bottom: 1px solid var(--border);
-      background: #fafbfc;
-      font-size: 0.8rem;
-      color: var(--muted);
-    }
-
-    .wave-toolbar button {
-      padding: 5px 12px;
-      font-size: 0.8rem;
-    }
-
-    .wave-tracks {
-      display: flex;
-      flex-direction: column;
-    }
-
-    .wave-track {
-      border-bottom: 1px solid var(--border);
-    }
-
-    .wave-track:last-child { border-bottom: none; }
-
-    .wave-track-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      padding: 4px 18px;
-      background: #f1f5f9;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .wave-track-name {
-      font-size: 0.78rem;
-      font-weight: 500;
-      color: var(--muted);
-    }
-
-    .wave-mute-btn {
-      display: none;
-      min-width: 26px;
-      height: 22px;
-      padding: 0 6px;
-      font-size: 0.72rem;
-      font-weight: 700;
-      line-height: 1;
-      border: 1px solid #cbd5e1;
-      border-radius: 4px;
-      background: #fff;
-      color: #64748b;
-      cursor: pointer;
-    }
-
-    .wave-tracks.playback-active .wave-mute-btn {
+    .pill {
       display: inline-flex;
       align-items: center;
-      justify-content: center;
+      gap: 6px;
+      background: var(--surface-container);
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--on-surface-variant);
     }
 
-    .wave-mute-btn:hover {
-      border-color: #94a3b8;
-      color: #334155;
+    .pill-k {
+      font-size: 10px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
     }
 
-    .wave-mute-btn.muted {
-      background: #f59e0b;
-      border-color: #d97706;
-      color: #fff;
+    .pill-v { font-weight: 600; color: var(--on-surface); }
+    .pill.is-on { background: #ecfdf5; }
+    .pill.is-on .pill-v { color: #059669; }
+    .pill.is-on::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--primary);
+      flex-shrink: 0;
     }
 
-    .wave-tracks.playback-active .wave-track.track-muted .wave-track-name {
-      opacity: 0.45;
-      text-decoration: line-through;
-    }
-
-    .wave-track canvas {
-      display: block;
-      width: 100%;
-      height: 96px;
-      background: var(--wave-bg);
-    }
-
-    /* ── Hints & warnings ── */
-    .hint-box {
-      font-size: 0.8rem;
-      color: var(--muted);
-      line-height: 1.6;
-      margin-top: 14px;
-      padding: 12px 14px;
-      background: #f8fafc;
-      border-radius: 8px;
-      border-left: 3px solid var(--esp-red);
-    }
-
-    .hint-box strong { color: var(--text); }
+    /* ── Warnings ── */
+    .banners { max-width: 1440px; margin: 12px auto 0; padding: 0 16px; width: 100%; }
 
     .warn-banner {
       display: none;
-      background: var(--esp-red-light);
-      border: 1px solid #fca5a5;
-      color: #991b1b;
-      border-radius: var(--radius);
+      background: #ffdad6;
+      border: 1px solid #ffb4aa;
+      color: #93000a;
+      border-radius: var(--radius-xl);
       padding: 12px 16px;
-      margin-bottom: 16px;
-      font-size: 0.88rem;
+      margin-bottom: 12px;
+      font-size: 13px;
       line-height: 1.5;
     }
 
     .warn-banner.show { display: block; }
 
-    .port-hint {
-      padding: 10px 12px;
-      border: 1px dashed var(--border);
-      border-radius: 8px;
-      font-size: 0.85rem;
-      color: var(--muted);
-      line-height: 1.5;
-      background: #f8fafc;
-    }
-
     code {
-      background: #f1f5f9;
+      font-family: var(--mono);
+      background: var(--surface-container);
       padding: 1px 5px;
       border-radius: 4px;
-      font-size: 0.88em;
+      font-size: 12px;
     }
 
-    .ctrl-hint {
-      font-size: 0.88rem;
-      color: #64748b;
-      margin: 0 0 12px;
+    /* ── App layout ── */
+    .app {
+      flex: 1;
+      display: flex;
+      flex-direction: row;
+      max-width: 1440px;
+      width: 100%;
+      margin: 0 auto;
+      align-items: stretch;
     }
 
-    .play-hint {
-      margin-top: -6px;
-      font-size: 0.8rem;
+    .side {
+      width: var(--sidebar-width);
+      flex-shrink: 0;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      background: var(--surface-container-low);
+      border-right: 1px solid var(--outline-variant);
+      overflow-y: auto;
     }
 
-    .ctrl-row {
-      display: block;
-      margin-bottom: 14px;
+    .main {
+      flex: 1;
+      min-width: 0;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
     }
 
-    .ctrl-inline {
+    /* ── Cards ── */
+    .card {
+      background: var(--surface-container-lowest);
+      border: 1px solid var(--outline-variant);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow);
+      padding: 16px;
+    }
+
+    .card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      gap: 8px;
+    }
+
+    .card-head-left {
       display: flex;
       align-items: center;
       gap: 8px;
-      margin-top: 6px;
     }
 
-    .ctrl-inline input[type="range"] {
-      flex: 1;
+    .card-head h2 {
+      margin: 0;
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--on-surface);
     }
 
-    .ctrl-inline input[type="number"] {
-      width: 64px;
+    .card-head .material-symbols-outlined { color: var(--primary); font-size: 22px; }
+
+    .card-badge {
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 500;
+      color: var(--secondary);
+      background: var(--surface-container-high);
+      border-radius: var(--radius-sm);
+      padding: 2px 8px;
     }
 
-    .ctrl-unit {
-      color: #64748b;
-      font-size: 0.9rem;
-      min-width: 24px;
-    }
-
-    .mic-gain-grid {
-      display: grid;
-      gap: 10px;
+    /* ── Segmented control ── */
+    .seg {
+      display: flex;
+      background: var(--surface-container);
+      border-radius: var(--radius-lg);
+      padding: 4px;
       margin-bottom: 12px;
+      gap: 2px;
     }
 
-    .mic-gain-row {
-      display: grid;
-      grid-template-columns: 72px 1fr 72px;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .mic-gain-row label {
+    .seg-btn {
+      flex: 1;
+      border: 0;
+      background: transparent;
+      color: var(--on-surface-variant);
+      border-radius: var(--radius-sm);
+      padding: 6px 0;
+      font-family: var(--mono);
+      font-size: 10px;
       font-weight: 600;
-      color: #334155;
-      font-size: 0.92rem;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, box-shadow 0.15s;
     }
 
-    .mic-gain-row input[type="number"] {
-      width: 72px;
+    .seg-btn:hover:not(.active) { color: var(--on-surface); }
+    .seg-btn.active {
+      background: var(--surface-container-lowest);
+      color: var(--on-surface);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
     }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    /* ── Form fields ── */
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-bottom: 8px;
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 500;
+      color: var(--on-surface-variant);
+      min-width: 0;
+    }
+
+    .field > input,
+    .field > select {
+      width: 100%;
+      height: 32px;
+      padding: 4px 8px;
+      border: 1px solid var(--outline-variant);
+      border-radius: var(--radius-sm);
+      font-family: var(--mono);
+      font-size: 12px;
+      background: var(--surface-container-low);
+      color: var(--on-surface);
+    }
+
+    .field > input:focus,
+    .field > select:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 1px var(--primary);
+    }
+
+    .field-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+    .port-row {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+      width: 100%;
+      min-width: 0;
+    }
+
+    .port-row select {
+      flex: 1 1 0;
+      min-width: 0;
+      max-width: 100%;
+    }
+
+    .port-row #refreshBtn {
+      flex: 0 0 32px;
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .port-row #refreshBtn .material-symbols-outlined {
+      font-size: 18px;
+    }
+
+    #serialPortPanel[hidden],
+    #localIpWrap[hidden],
+    #networkPortWrap[hidden],
+    #manualPortWrap[hidden] { display: none !important; }
+
+    .link-btn {
+      border: 0;
+      background: none;
+      padding: 0;
+      margin-top: 6px;
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--secondary);
+      cursor: pointer;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    .link-btn:hover { color: var(--primary); }
 
     .local-ip-panel {
       margin-bottom: 12px;
-      padding: 12px 14px;
-      background: #f8fafc;
-      border: 1px solid var(--border);
-      border-radius: 8px;
+      padding: 12px;
+      background: var(--surface-container-low);
+      border: 1px solid var(--outline-variant);
+      border-radius: var(--radius-lg);
     }
 
     .local-ip-title {
-      font-size: 0.8rem;
+      font-size: 10px;
       font-weight: 500;
-      color: var(--muted);
+      color: var(--on-surface-variant);
       margin-bottom: 8px;
     }
 
     .local-ip-row {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 8px;
-      align-items: center;
+      display: flex;
+      gap: 4px;
       margin-bottom: 8px;
+      align-items: center;
+      width: 100%;
+      min-width: 0;
     }
 
-    .local-ip-panel input[type="text"] {
-      width: 100%;
+    .local-ip-row select {
+      flex: 1 1 0;
+      min-width: 0;
+      max-width: 100%;
     }
+
+    .local-ip-row #refreshIpBtn {
+      flex: 0 0 auto;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+
+    .local-ip-panel input[type="text"] { width: 100%; }
 
     .local-ip-note {
       margin-top: 8px;
-      font-size: 0.76rem;
-      color: var(--muted);
+      font-size: 11px;
+      color: var(--on-surface-variant);
       line-height: 1.45;
     }
 
     .network-server-hint {
       margin-top: 10px;
       padding-top: 10px;
-      border-top: 1px dashed var(--border);
+      border-top: 1px dashed var(--outline-variant);
     }
 
-    .network-server-hint strong {
-      color: var(--text);
+    .port-hint {
+      padding: 10px;
+      border: 1px dashed var(--outline-variant);
+      border-radius: var(--radius-lg);
+      font-size: 12px;
+      color: var(--on-surface-variant);
+      background: var(--surface-container-low);
+    }
+
+    /* ── Buttons ── */
+    .btn-row { display: flex; gap: 8px; margin-top: 12px; }
+
+    button {
+      font-family: var(--mono);
+      cursor: pointer;
+      border-radius: var(--radius-lg);
+      transition: filter 0.15s, transform 0.1s;
+    }
+
+    button:active:not(:disabled) { transform: scale(0.98); }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    .btn {
+      border: 0;
+      padding: 9px 14px;
+      font-size: 12px;
+      font-weight: 700;
+      background: var(--primary-container);
+      color: var(--on-primary-container);
+    }
+
+    .btn:hover:not(:disabled) { filter: brightness(1.08); }
+
+    .btn.ghost {
+      background: transparent;
+      color: var(--primary);
+      border: 1px solid var(--outline);
+    }
+
+    .btn.ghost:hover:not(:disabled) { background: rgba(185, 12, 16, 0.05); }
+
+    .btn.warn {
+      background: transparent;
+      color: #b45309;
+      border: 1px solid #fcd34d;
+    }
+
+    .btn.warn:hover:not(:disabled) { background: #fffbeb; }
+
+    .btn.block { flex: 1; }
+
+    .btn-icon {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      border: 0;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 500;
+      background: var(--surface-container);
+      color: var(--on-surface);
+      border-radius: var(--radius-lg);
+    }
+
+    .btn-icon:hover:not(:disabled) { background: var(--surface-container-high); }
+
+    .btn-icon-plain {
+      border: 0;
+      padding: 6px;
+      background: transparent;
+      color: var(--on-surface-variant);
+      border-radius: var(--radius-sm);
+    }
+
+    .btn-icon-plain:hover:not(:disabled) {
+      background: var(--surface-container);
+      color: var(--primary);
+    }
+
+    /* ── Mic gain ── */
+    .mic-gain-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 12px;
+      max-height: 192px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .mic-gain-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .mic-gain-row label {
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 500;
+      color: var(--on-surface-variant);
+      width: 28px;
+      flex-shrink: 0;
+    }
+
+    .mic-gain-row input[type="range"] { flex: 1; height: 4px; }
+
+    .mic-gain-row input[type="number"] {
+      width: 36px;
+      text-align: center;
+      padding: 2px;
+      font-family: var(--mono);
+      font-size: 10px;
+      border: 1px solid var(--outline-variant);
+      border-radius: var(--radius-sm);
+      background: var(--surface-container-low);
+    }
+
+    .audio-divider {
+      border-top: 1px solid var(--outline-variant);
+      padding-top: 12px;
+      margin-top: 4px;
+    }
+
+    .play-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .play-row input[type="range"] { flex: 1; }
+
+    .play-row input[type="number"] {
+      width: 48px;
+      text-align: center;
+      font-family: var(--mono);
+      font-size: 12px;
+      border: 1px solid var(--outline-variant);
+      border-radius: var(--radius-sm);
+      padding: 4px;
+    }
+
+    .ctrl-unit { font-size: 12px; color: var(--on-surface-variant); }
+
+    /* ── Toolbar ── */
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      background: var(--surface-container-lowest);
+      border: 1px solid var(--outline-variant);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow);
+      padding: 8px 16px;
+    }
+
+    .statusline {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 600;
+      background: #f0fdf4;
+      color: #15803d;
+      border: 1px solid #bbf7d0;
+    }
+
+    .statusline .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #22c55e;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .statusline.status-disconnected {
+      background: var(--surface-container);
+      color: var(--on-surface-variant);
+      border-color: var(--outline-variant);
+    }
+
+    .statusline.status-disconnected .dot {
+      background: #9ca3af;
+      animation: none;
+    }
+
+    .statusline.status-connected {
+      background: #f0fdf4;
+      color: #15803d;
+      border-color: #bbf7d0;
+    }
+
+    .tool-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .tool-divider {
+      width: 1px;
+      height: 24px;
+      background: var(--outline-variant);
+      margin: 0 4px;
+    }
+
+    .tool-actions select {
+      border: 0;
+      background: var(--surface-container);
+      border-radius: var(--radius-lg);
+      padding: 6px 12px;
+      font-family: var(--mono);
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    /* ── Stats grid ── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 16px;
+    }
+
+    .stat-card {
+      background: var(--surface-container-lowest);
+      border: 1px solid var(--outline-variant);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow);
+      padding: 16px;
+    }
+
+    .stat-card .k {
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 500;
+      text-transform: uppercase;
+      color: var(--on-surface-variant);
+      margin-bottom: 4px;
+    }
+
+    .stat-card .v {
+      font-family: var(--mono);
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--on-surface);
+    }
+
+    #throughput { color: var(--primary); }
+
+    .meter-bar {
+      height: 16px;
+      background: var(--surface-container-high);
+      border: 1px solid var(--outline-variant);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .meter-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #22c55e 0%, #eab308 55%, var(--primary-container) 100%);
+      transition: width 60ms linear;
+    }
+
+    /* ── Waveform panel ── */
+    .wave-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: var(--surface-container-lowest);
+      border: 1px solid var(--outline-variant);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      min-height: 320px;
+      cursor: crosshair;
+    }
+
+    .wave-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 16px;
+      border-bottom: 1px solid var(--outline-variant);
+    }
+
+    .wave-head-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .wave-head-left h2 {
+      margin: 0;
+      font-family: var(--mono);
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .wave-badge {
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 500;
+      color: var(--on-surface-variant);
+      background: var(--surface-container-high);
+      border-radius: 999px;
+      padding: 4px 12px;
+    }
+
+    .wave-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .height-control {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding-right: 8px;
+      border-right: 1px solid var(--outline-variant);
+      margin-right: 4px;
+    }
+
+    .height-control input[type="range"] { width: 96px; }
+
+    .wave-sub {
+      padding: 6px 16px;
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--on-surface-variant);
+      border-bottom: 1px solid var(--outline-variant);
+      background: var(--surface-container-low);
+    }
+
+    .waveform-list {
+      flex: 1;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .wave-tracks {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      max-height: 56vh;
+      scrollbar-gutter: stable;
+    }
+
+    .waveform-row {
+      display: flex;
+      gap: 16px;
+      height: 128px;
+      min-height: 40px;
+    }
+
+    .waveform-row.track-muted .waveform-sidebar {
+      opacity: 0.3;
+      background: var(--surface-container);
+      border-style: dashed;
+    }
+
+    .waveform-row.track-muted .wave-track-name {
+      opacity: 0.25;
+      color: var(--on-surface-variant);
+      text-decoration: line-through;
+    }
+
+    .waveform-row.track-muted .wave-track-sub {
+      opacity: 0.2;
+    }
+
+    .waveform-row.track-muted .waveform-plot {
+      opacity: 0.18;
+      filter: grayscale(1) contrast(0.8);
+      border-style: dashed;
+    }
+
+    .waveform-row.track-muted .waveform-plot::after {
+      content: 'MUTED';
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      color: var(--on-surface-variant);
+      opacity: 0.35;
+      pointer-events: none;
+      background: rgba(248, 249, 250, 0.65);
+    }
+
+    .waveform-sidebar {
+      width: 128px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 8px;
+      background: var(--surface-container-low);
+      border: 1px solid var(--outline-variant);
+      border-radius: var(--radius-lg);
+    }
+
+    .wave-track-name {
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--on-surface);
+    }
+
+    .wave-track-sub {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--on-surface-variant);
+      margin-top: 2px;
+    }
+
+    .wave-mute-btn {
+      width: 100%;
+      padding: 4px 0;
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 500;
+      border: 1px solid var(--outline);
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--on-surface);
+      cursor: pointer;
+    }
+
+    .wave-mute-btn:hover { background: var(--surface-container-high); }
+
+    .wave-mute-btn.muted {
+      background: transparent;
+      border-color: var(--outline-variant);
+      border-style: dashed;
+      color: var(--on-surface-variant);
+      opacity: 0.45;
+    }
+
+    .wave-mute-btn.muted:hover {
+      opacity: 0.65;
+      background: var(--surface-container);
+    }
+
+    .waveform-plot {
+      flex: 1;
+      position: relative;
+      border: 1px solid var(--outline-variant);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      background: var(--surface-container-low);
+    }
+
+    .waveform-plot canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .site-footer {
+      text-align: center;
+      padding: 12px 20px;
+      font-size: 11px;
+      color: var(--on-surface-variant);
+      border-top: 1px solid var(--outline-variant);
+      background: var(--surface);
+    }
+
+    @media (max-width: 1080px) {
+      .app { flex-direction: column; }
+      .side { width: 100%; border-right: 0; border-bottom: 1px solid var(--outline-variant); }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .pills { display: none; }
     }
 
     @media (max-width: 640px) {
-      .port-row { grid-template-columns: 1fr 1fr; }
-      .site-header { padding: 12px 16px; }
-      .wrap { padding: 14px 16px; }
+      .waveform-row { flex-direction: column; height: auto !important; }
+      .waveform-sidebar { width: 100%; flex-direction: row; align-items: center; }
+      .waveform-plot { min-height: 80px; }
     }
   </style>
 </head>
 <body>
-  <header class="site-header">
-    <a href="https://www.espressif.com" target="_blank" rel="noopener noreferrer">
-      <img src="espressif-logo.svg" alt="Espressif Systems" class="brand-logo" />
-    </a>
-    <div class="header-main">
-      <h1>Audio PCM Monitor <span id="pageVersion" class="page-version"></span></h1>
-      <p class="header-sub" id="modeHint">
-        双击 <code>start_monitor.bat</code> 启动 · 选择传输方式后连接
-      </p>
+  <header class="topbar">
+    <div class="brand">
+      <a href="https://www.espressif.com" target="_blank" rel="noopener noreferrer">
+        <img src="espressif-logo.svg" alt="Espressif Systems" class="brand-logo" />
+      </a>
+      <div>
+        <div class="brand-title">PCM Monitor <span id="pageVersion" class="page-version"></span></div>
+        <div class="brand-sub" id="modeHint">Bridge monitor · Serial / TCP / UDP</div>
+      </div>
+    </div>
+    <div class="pills">
+      <div class="pill"><span class="pill-k">Transport</span><span class="pill-v" id="pillTransport">Serial</span></div>
+      <div class="pill" id="pillStateWrap"><span class="pill-k">State</span><span class="pill-v" id="pillState">Idle</span></div>
+      <div class="pill"><span class="pill-k">Rate</span><span class="pill-v" id="pillRate">0.0 KB/s</span></div>
+      <div class="pill"><span class="pill-k">Time</span><span class="pill-v" id="pillTime">0.0 s</span></div>
+      <div class="pill"><span class="pill-k">Peak</span><span class="pill-v" id="pillPeak">0</span></div>
+      <div class="pill"><span class="pill-k">RMS</span><span class="pill-v" id="pillRms">0</span></div>
     </div>
   </header>
 
-  <div class="wrap">
+  <div class="banners">
     <div class="warn-banner" id="fileWarn">
       当前是直接打开的 HTML（file://），无法使用串口。请双击 <code>start_monitor.bat</code>。
     </div>
-
     <div class="warn-banner" id="bridgeWarn">
       未连接到 Python 串口桥接。请重新双击 <code>start_monitor.bat</code>，
       使用黑窗口里显示的地址（通常是 <code>http://127.0.0.1:8765/...</code>）。
     </div>
+  </div>
 
-    <div class="panel">
-      <h2 class="panel-title">连接</h2>
-      <div class="grid" style="margin-bottom:12px">
-        <label>传输方式
-          <select id="transportMode">
-            <option value="serial">Serial (USB/UART)</option>
-            <option value="tcp">TCP (设备 → PC Server)</option>
-            <option value="udp">UDP (设备 → PC Server)</option>
-          </select>
-        </label>
-        <label id="networkPortWrap" hidden>PCM 监听端口
-          <input id="networkPort" type="number" value="8766" min="1024" max="65535" step="1" />
-        </label>
-      </div>
-      <div id="localIpWrap" class="local-ip-panel" hidden>
-        <div class="local-ip-title">PC 本机 IP（填到设备 menuconfig → Server IP）</div>
-        <div class="local-ip-row">
-          <select id="localIpSelect"><option value="">— 刷新获取网卡列表 —</option></select>
-          <button id="refreshIpBtn" class="secondary" type="button">Refresh IP</button>
+  <div class="app">
+    <aside class="side">
+      <section class="card">
+        <div class="card-head">
+          <div class="card-head-left">
+            <span class="material-symbols-outlined">settings_input_component</span>
+            <h2>Connection</h2>
+          </div>
+          <span class="card-badge" id="connBadge">Serial</span>
         </div>
-        <input id="localIpManual" type="text" placeholder="手动覆盖，如 192.168.1.105（留空则使用上方列表）" />
-        <div class="local-ip-note">★ 为系统推荐（默认路由）；多网卡时请选与 ESP 同网段的那个</div>
-        <div id="networkServerHint" class="local-ip-note network-server-hint" hidden>
-          <strong>TCP：</strong>「停止 Server」会断开连接；再次「启动 Server」后，设备会在下次发送 PCM 时<strong>自动重连</strong>（一般无需重启）。<br>
-          <strong>UDP：</strong>「停止 Server」后再启动，设备<strong>无需重启</strong>，继续发包即可。
+
+        <div class="seg" id="transportSeg" role="tablist">
+          <button type="button" class="seg-btn active" data-mode="serial">Serial</button>
+          <button type="button" class="seg-btn" data-mode="tcp">TCP</button>
+          <button type="button" class="seg-btn" data-mode="udp">UDP</button>
         </div>
-      </div>
-      <div id="serialPortPanel">
-        <div class="port-row" id="portRow">
-          <label id="portSelectWrap">Serial Port (CDC)
-            <select id="portSelect"><option value="">-- refresh ports --</option></select>
-          </label>
-          <label id="manualPortWrap">Manual COM
-            <input id="manualPort" type="text" placeholder="COM23" />
-          </label>
-          <label id="baudWrap">Baud
-            <input id="baudRate" type="number" value="115200" min="9600" max="3000000" step="1" />
-          </label>
-          <button id="refreshBtn" class="secondary">Refresh</button>
-          <div id="portHint" class="port-hint" hidden style="grid-column:1/-1">
-            Web Serial mode: click Connect COM Port, pick USB Serial/JTAG in Chrome popup.
+        <select id="transportMode" class="sr-only" tabindex="-1" aria-hidden="true">
+          <option value="serial">Serial</option>
+          <option value="tcp">TCP</option>
+          <option value="udp">UDP</option>
+        </select>
+
+        <div id="networkPortWrap" hidden></div>
+        <input id="networkPort" type="hidden" value="8766" />
+
+        <div id="localIpWrap" class="local-ip-panel" hidden>
+          <div class="local-ip-title">PC local IP (device menuconfig → Server IP)</div>
+          <div class="local-ip-row">
+            <select id="localIpSelect"><option value="">— refresh to list NICs —</option></select>
+            <button id="refreshIpBtn" class="btn ghost" type="button">Refresh IP</button>
+          </div>
+          <input id="localIpManual" type="text" placeholder="manual override, e.g. 192.168.1.105" />
+          <div class="local-ip-note">★ routed default; with multiple NICs pick the one on the ESP subnet</div>
+          <div id="networkServerHint" class="local-ip-note network-server-hint" hidden>
+            <strong>TCP:</strong> stopping the server drops the link; on restart the device auto-reconnects on its next PCM send.<br>
+            <strong>UDP:</strong> restart the server anytime; the device keeps sending, no reboot needed.
           </div>
         </div>
-      </div>
-    </div>
 
-    <div class="panel" id="devCtrlPanel">
-      <h2 class="panel-title">设备控制</h2>
-      <p class="ctrl-hint">连接后调整音量/增益，须点下方红色 <strong>Apply to device</strong> 才会下发（滑条不会自动发送）。</p>
-      <p class="ctrl-hint play-hint">开启实时播放后，每条波形轨右侧会出现 <strong>M</strong> 静音钮（类似 Audacity）；默认全部出声，点 M 可单独关掉某通道。</p>
-      <label class="ctrl-row">
-        播放音量
-        <div class="ctrl-inline">
-          <input id="devPlayVol" type="range" min="0" max="100" step="1" value="70" disabled />
-          <input id="devPlayVolNum" type="number" min="0" max="100" step="1" value="70" disabled />
-          <span class="ctrl-unit">%</span>
+        <div id="serialPortPanel">
+          <div class="field" id="portSelectWrap">
+            <label>Serial Port</label>
+            <div class="port-row" id="portRow">
+              <select id="portSelect"><option value="">-- refresh ports --</option></select>
+              <button id="refreshBtn" class="btn ghost" type="button" title="Refresh ports">
+                <span class="material-symbols-outlined">refresh</span>
+              </button>
+            </div>
+            <button id="manualPortToggle" class="link-btn" type="button" hidden>Enter port manually…</button>
+          </div>
+          <div class="field" id="manualPortWrap" hidden>
+            <label for="manualPort">Manual Port</label>
+            <input id="manualPort" type="text" placeholder="COM23 or /dev/ttyACM0" />
+          </div>
+          <div class="field" id="baudWrap">
+            <label for="baudRate">Baud Rate</label>
+            <input id="baudRate" type="number" value="115200" min="9600" max="3000000" step="1" />
+          </div>
+          <div id="portHint" class="port-hint" hidden>
+            Web Serial mode: click Connect, then pick USB Serial/JTAG in the Chrome popup.
+          </div>
         </div>
-      </label>
-      <div id="micGainControls" class="mic-gain-grid"></div>
-      <div class="btn-row">
-        <button id="applyDevCtrlBtn" class="btn-apply" disabled>Apply to device</button>
-      </div>
-    </div>
 
-    <div class="panel">
-      <h2 class="panel-title">音频参数</h2>
-      <div class="grid">
-        <label>Sample Rate (Hz)
-          <input id="sampleRate" type="number" value="16000" min="8000" max="192000" step="1000" />
-        </label>
-        <label>Channels
-          <select id="channels">
-            <option value="1">1</option>
-            <option value="2">2</option>
-            <option value="3">3</option>
-            <option value="4" selected>4</option>
-          </select>
-        </label>
-        <label>Bits
-          <select id="bits">
-            <option value="16" selected>16 (signed)</option>
-            <option value="8">8 (unsigned)</option>
-          </select>
-        </label>
-        <label>Endian
-          <select id="endian">
-            <option value="le" selected>Little Endian</option>
-            <option value="be">Big Endian</option>
-          </select>
-        </label>
-        <label>Wave Window (s)
+        <div class="btn-row">
+          <button id="connectBtn" class="btn block" type="button">Connect</button>
+          <button id="disconnectBtn" class="btn ghost block" type="button" disabled>Disconnect</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <div class="card-head-left">
+            <span class="material-symbols-outlined">format_list_bulleted</span>
+            <h2>PCM Format</h2>
+          </div>
+        </div>
+        <div class="field-2">
+          <div class="field">
+            <label for="sampleRate">Sample Rate</label>
+            <input id="sampleRate" type="number" value="16000" min="8000" max="192000" step="1000" />
+          </div>
+          <div class="field">
+            <label for="channels">Channels</label>
+            <select id="channels">
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4" selected>4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+              <option value="7">7</option>
+              <option value="8">8</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="bits">Bits</label>
+            <select id="bits">
+              <option value="16" selected>16 signed</option>
+              <option value="8">8 unsigned</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="endian">Endian</label>
+            <select id="endian">
+              <option value="le" selected>LE</option>
+              <option value="be">BE</option>
+            </select>
+          </div>
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label for="waveWindow">Wave Window (s)</label>
           <select id="waveWindow">
             <option value="1">1</option>
             <option value="2">2</option>
@@ -664,69 +1088,104 @@
             <option value="5">5</option>
             <option value="8">8</option>
           </select>
-        </label>
-      </div>
+        </div>
+      </section>
 
-      <div class="btn-row">
-        <button id="connectBtn">连接 COM 口</button>
-        <button id="disconnectBtn" class="secondary" disabled>断开</button>
-        <button id="pauseBtn" class="secondary" disabled>暂停</button>
-        <button id="playBtn" disabled>开启实时播放</button>
-        <button id="saveBtn" class="secondary" disabled>Save WAV</button>
-        <button id="clearBtn" class="danger" disabled>Clear</button>
+      <section class="card" id="devCtrlPanel">
+        <div class="card-head">
+          <div class="card-head-left">
+            <span class="material-symbols-outlined">equalizer</span>
+            <h2>Audio Control</h2>
+          </div>
+          <span class="card-badge" id="micBadge">4 mic · 36.5 dB</span>
+        </div>
+        <div id="micGainControls" class="mic-gain-grid"></div>
+        <div class="audio-divider">
+          <div class="play-row">
+            <span class="material-symbols-outlined">volume_up</span>
+            <input id="devPlayVol" type="range" min="0" max="100" step="1" value="70" disabled />
+            <input id="devPlayVolNum" type="number" min="0" max="100" step="1" value="70" disabled />
+            <span class="ctrl-unit">%</span>
+          </div>
+          <div class="btn-row" style="margin-top:0">
+            <button id="applyDevCtrlBtn" class="btn block" type="button" disabled>Apply Controls</button>
+            <button id="resetGainBtn" class="btn ghost block" type="button">Reset Gain</button>
+          </div>
+        </div>
+      </section>
+    </aside>
+
+    <main class="main">
+      <div class="toolbar">
+        <span class="statusline status-disconnected" id="statusCard">
+          <span class="dot"></span><span id="status">Disconnected</span>
+        </span>
+        <div class="tool-actions">
+          <button id="followBtn" class="btn-icon" type="button">
+            <span class="material-symbols-outlined">live_tv</span> Follow Live
+          </button>
+          <button id="pauseBtn" class="btn-icon" type="button" disabled>
+            <span class="material-symbols-outlined">pause</span> Pause
+          </button>
+          <button id="playBtn" class="btn-icon" type="button" disabled>
+            <span class="material-symbols-outlined">monitor</span> Monitor
+          </button>
+          <div class="tool-divider"></div>
+          <select id="exportFormat" title="export format">
+            <option value="wav">WAV</option>
+            <option value="pcm">PCM</option>
+          </select>
+          <button id="saveBtn" class="btn-icon-plain" type="button" disabled title="Save">
+            <span class="material-symbols-outlined">save</span>
+          </button>
+          <button id="clearBtn" class="btn-icon-plain" type="button" disabled title="Clear">
+            <span class="material-symbols-outlined">delete_sweep</span>
+          </button>
+        </div>
       </div>
 
       <div class="stats-grid">
-        <div class="stat-card status-disconnected" id="statusCard">
-          <div class="label">Status</div>
-          <div class="value" id="status">Disconnected</div>
-        </div>
-        <div class="stat-card">
-          <div class="label">Bytes</div>
-          <div class="value" id="byteCount">0</div>
-        </div>
-        <div class="stat-card">
-          <div class="label">Duration</div>
-          <div class="value" id="duration">0.0 s</div>
-        </div>
-        <div class="stat-card">
-          <div class="label">Peak</div>
-          <div class="value" id="peakVal">0</div>
-        </div>
-        <div class="stat-card">
-          <div class="label">RMS</div>
-          <div class="value" id="rmsVal">0</div>
-        </div>
+        <div class="stat-card"><div class="k">Bytes Received</div><div class="v" id="byteCount">0</div></div>
+        <div class="stat-card"><div class="k">Duration</div><div class="v" id="duration">0.0 s</div></div>
+        <div class="stat-card"><div class="k">Throughput</div><div class="v" id="throughput">0.0 KB/s</div></div>
+        <div class="stat-card"><div class="k">Peak Level</div><div class="v" id="peakVal">0</div></div>
+        <div class="stat-card"><div class="k">RMS Power</div><div class="v" id="rmsVal">0</div></div>
       </div>
+
       <div class="meter-bar"><div id="meterFill" class="meter-fill"></div></div>
 
-      <div class="hint-box">
-        <strong>PCM 格式：</strong>多通道交错（Ch0, Ch1, … 按采样点排列），参数须与固件一致<br>
-        <strong>网络模式：</strong>PC 作 Server，设备作 Client；menuconfig 填 PC IP + 端口（与上方监听端口一致）<br>
-        <strong>增益命令：</strong><code>gch 0 30</code> = Ch0，与下方滑条 <code>data-ch</code> 一致（0 起）<br>
-        <strong>波形操作：</strong>滚轮缩放 · Shift+滚轮平移 · 「跟随最新」回实时末尾<br>
-        <strong>注意：</strong>USB 口应只发 PCM；Log/Console 请走其它串口，避免污染波形
-      </div>
-    </div>
-
-    <div class="panel wave-panel" id="wavePanel">
-      <div class="wave-header">
-        <span id="trackName">Waveform</span>
-        <span id="waveInfo">Waiting for data...</span>
-      </div>
-      <div class="wave-toolbar">
-        <button id="followBtn" class="secondary" type="button">跟随最新</button>
-        <span id="viewInfo">滚轮缩放 · Shift+滚轮平移</span>
-      </div>
-      <div id="waveTracks" class="wave-tracks"></div>
-    </div>
+      <section class="wave-panel" id="wavePanel">
+        <div class="wave-header">
+          <div class="wave-head-left">
+            <h2 id="trackName">Waveform</h2>
+            <span id="waveInfo" class="wave-badge">Waiting for data...</span>
+          </div>
+          <div class="wave-controls">
+            <div class="height-control">
+              <span class="material-symbols-outlined">height</span>
+              <input id="globalHeightSlider" type="range" min="40" max="400" value="128" title="Track height" />
+            </div>
+            <button id="zoomInBtn" class="btn-icon-plain" type="button" title="Zoom in">
+              <span class="material-symbols-outlined">zoom_in</span>
+            </button>
+            <button id="zoomOutBtn" class="btn-icon-plain" type="button" title="Zoom out">
+              <span class="material-symbols-outlined">zoom_out</span>
+            </button>
+          </div>
+        </div>
+        <div class="wave-sub"><span id="viewInfo">Scroll to zoom · Shift+scroll to pan · drag the side bar to scroll tracks</span></div>
+        <div class="waveform-list">
+          <div id="waveTracks" class="wave-tracks"></div>
+        </div>
+      </section>
+    </main>
   </div>
 
   <footer class="site-footer">
     All Espressif's logos are trademarks of Espressif Systems (Shanghai) Co., Ltd.
   </footer>
 
-  <script>
+<script>
     const els = {
       fileWarn: document.getElementById('fileWarn'),
       bridgeWarn: document.getElementById('bridgeWarn'),
@@ -745,6 +1204,7 @@
       portSelectWrap: document.getElementById('portSelectWrap'),
       manualPortWrap: document.getElementById('manualPortWrap'),
       manualPort: document.getElementById('manualPort'),
+      manualPortToggle: document.getElementById('manualPortToggle'),
       portHint: document.getElementById('portHint'),
       modeHint: document.getElementById('modeHint'),
       portSelect: document.getElementById('portSelect'),
@@ -909,7 +1369,38 @@
     function selectedPortName() {
       const manual = (els.manualPort?.value || '').trim();
       if (manual) return manual.toUpperCase().startsWith('COM') ? manual.toUpperCase() : manual;
-      return els.portSelect.value;
+      return els.portSelect?.value || '';
+    }
+
+    function updateManualPortUi(portCount) {
+      const bridgeMode = httpBridge || useNativeBridge();
+      const toggle = els.manualPortToggle;
+      const wrap = els.manualPortWrap;
+      if (!wrap) return;
+
+      if (!bridgeMode) {
+        if (toggle) toggle.hidden = true;
+        wrap.hidden = true;
+        return;
+      }
+
+      const empty = !portCount;
+      const manualOpen = wrap.dataset.open === '1';
+
+      if (empty) {
+        wrap.hidden = false;
+        wrap.dataset.open = '1';
+        if (toggle) {
+          toggle.hidden = false;
+          toggle.textContent = 'Hide manual port';
+        }
+      } else {
+        wrap.hidden = !manualOpen;
+        if (toggle) {
+          toggle.hidden = false;
+          toggle.textContent = manualOpen ? 'Hide manual port' : 'Enter port manually…';
+        }
+      }
     }
 
     function setupPortUi() {
@@ -925,11 +1416,11 @@
 
       if (els.connectBtn) {
         els.connectBtn.textContent = net
-          ? (mode === 'tcp' ? '启动 TCP Server' : '启动 UDP Server')
-          : '连接 COM 口';
+          ? (mode === 'tcp' ? 'Start TCP Server' : 'Start UDP Server')
+          : 'Connect';
       }
       if (els.disconnectBtn) {
-        els.disconnectBtn.textContent = net ? '停止 Server' : '断开';
+        els.disconnectBtn.textContent = net ? 'Stop Server' : 'Disconnect';
       }
       if (els.portHint) els.portHint.hidden = true;
 
@@ -953,11 +1444,18 @@
         const pcmPort = els.networkPort?.value || 8766;
         els.modeHint.textContent = `网络模式：PC 监听 0.0.0.0:${pcmPort}；设备 menuconfig Server IP 填 ${pcIp}`;
       } else if (useNativeBridge()) {
-        els.modeHint.textContent = 'Native 模式：下拉选择 CDC 串口，或 Manual COM 填 COM23。';
+        els.modeHint.textContent = 'Native 模式：Refresh 选串口；列表为空时可手动填 Port。';
       } else if (httpBridge) {
-        els.modeHint.textContent = 'Python 桥接 OK：点 Refresh 列出 COM 口，或 Manual COM 填 COM23。';
+        els.modeHint.textContent = 'Python 桥接 OK：Refresh 选 COM/tty；列表为空时可手动填 Port。';
       } else {
         els.modeHint.textContent = '未连接桥接：请双击 start_monitor.bat，用黑窗口里的 URL 打开（如 http://127.0.0.1:8765/...）';
+      }
+
+      if (!net) {
+        const n = els.portSelect
+          ? [...els.portSelect.options].filter((o) => o.value && !o.value.startsWith('--')).length
+          : 0;
+        updateManualPortUi(n);
       }
     }
 
@@ -1044,7 +1542,7 @@
       const startSec = (viewOffset / c.sampleRate).toFixed(2);
       const endSec = ((viewOffset + viewSpan) / c.sampleRate).toFixed(2);
       const totalSec = (histLen / c.sampleRate).toFixed(2);
-      els.viewInfo.textContent = `视图 ${startSec}s - ${endSec}s / 总长 ${totalSec}s · 滚轮缩放 · Shift+滚轮平移`;
+      els.viewInfo.textContent = `View ${startSec}s - ${endSec}s / total ${totalSec}s · scroll to zoom · Shift+scroll to pan · drag the side bar to scroll tracks`;
     }
 
     function channelLabels(n) {
@@ -1061,9 +1559,10 @@
       if (btn) {
         btn.classList.toggle('muted', muted);
         btn.setAttribute('aria-pressed', muted ? 'true' : 'false');
+        btn.textContent = muted ? 'MUTED' : 'MUTE';
         btn.title = muted ? '取消静音 (Unmute)' : '静音 (Mute)';
       }
-      const track = btn?.closest('.wave-track');
+      const track = btn?.closest('.waveform-row');
       if (track) track.classList.toggle('track-muted', muted);
     }
 
@@ -1089,6 +1588,19 @@
       return indices.map((i) => `Ch${i}`).join('+');
     }
 
+    function trackHeightPx() {
+      const slider = document.getElementById('globalHeightSlider');
+      const v = Number(slider?.value || 128);
+      return Number.isFinite(v) ? Math.min(400, Math.max(40, v)) : 128;
+    }
+
+    function applyTrackHeights() {
+      const h = `${trackHeightPx()}px`;
+      document.querySelectorAll('.waveform-row').forEach((row) => {
+        row.style.height = h;
+      });
+    }
+
     function initWaveTracks() {
       const n = cfg().channels;
       const prevMuted = new Map(channelMuted);
@@ -1102,23 +1614,31 @@
       resetHistory();
 
       const labels = channelLabels(n);
+      const rowH = trackHeightPx();
       for (let ch = 0; ch < n; ch++) {
         const track = document.createElement('div');
-        track.className = 'wave-track';
+        track.className = 'waveform-row';
+        track.style.height = `${rowH}px`;
         if (isChannelMuted(ch)) track.classList.add('track-muted');
 
-        const head = document.createElement('div');
-        head.className = 'wave-track-head';
+        const sidebar = document.createElement('div');
+        sidebar.className = 'waveform-sidebar';
 
-        const name = document.createElement('span');
+        const labelBlock = document.createElement('div');
+        const name = document.createElement('div');
         name.className = 'wave-track-name';
         name.textContent = labels[ch] ?? `Ch${ch}`;
+        const sub = document.createElement('div');
+        sub.className = 'wave-track-sub';
+        sub.textContent = 'PCM Input';
+        labelBlock.appendChild(name);
+        labelBlock.appendChild(sub);
 
         const muteBtn = document.createElement('button');
         muteBtn.type = 'button';
         muteBtn.className = 'wave-mute-btn';
         muteBtn.dataset.ch = String(ch);
-        muteBtn.textContent = 'M';
+        muteBtn.textContent = isChannelMuted(ch) ? 'MUTED' : 'MUTE';
         muteBtn.setAttribute('aria-label', `Mute ${labels[ch] ?? `Ch${ch}`}`);
         if (isChannelMuted(ch)) {
           muteBtn.classList.add('muted');
@@ -1135,15 +1655,19 @@
           drawWaveform();
         });
 
-        head.appendChild(name);
-        head.appendChild(muteBtn);
+        sidebar.appendChild(labelBlock);
+        sidebar.appendChild(muteBtn);
+
+        const plot = document.createElement('div');
+        plot.className = 'waveform-plot waveform-bg';
 
         const canvas = document.createElement('canvas');
         canvas.width = 1200;
-        canvas.height = 100;
+        canvas.height = rowH;
 
-        track.appendChild(head);
-        track.appendChild(canvas);
+        plot.appendChild(canvas);
+        track.appendChild(sidebar);
+        track.appendChild(plot);
         els.waveTracks.appendChild(track);
         waveCanvases.push(canvas);
       }
@@ -1188,11 +1712,19 @@
     }
 
     function setStatus(text) {
-      els.status.textContent = text;
-      if (els.statusCard) {
-        const ok = /connect/i.test(text) && !/disconnect/i.test(text);
-        els.statusCard.classList.toggle('status-connected', ok);
-        els.statusCard.classList.toggle('status-disconnected', !ok);
+      const card = els.statusCard;
+      const on = /connect/i.test(text) && !/disconnect|fail/i.test(text);
+      const paused = /pause/i.test(text);
+      if (els.status) {
+        if (on && !paused) {
+          els.status.textContent = 'STREAMING';
+        } else {
+          els.status.textContent = text;
+        }
+      }
+      if (card) {
+        card.classList.toggle('status-connected', on && !paused);
+        card.classList.toggle('status-disconnected', !on || paused);
       }
     }
 
@@ -1208,7 +1740,7 @@
         els.pauseBtn.disabled = !on;
         if (!on) {
           streamPaused = false;
-          els.pauseBtn.textContent = '暂停';
+          els.pauseBtn.textContent = 'Pause';
         }
       }
       if (els.playBtn) els.playBtn.disabled = !on;
@@ -1231,7 +1763,7 @@
 
     function micCountFromUi() {
       const n = Number(els.channels?.value || 4);
-      return n >= 3 && n <= 4 ? n : 4;
+      return n >= 1 && n <= 8 ? n : 4;
     }
 
     function syncPlayVolFromSlider() {
@@ -1272,7 +1804,7 @@
         const row = document.createElement('div');
         row.className = 'mic-gain-row';
         row.innerHTML = `
-          <label>Ch${i}</label>
+          <label>CH${i}</label>
           <input type="range" class="mic-gain-slider" data-ch="${i}" min="0" max="${MIC_GAIN_DB_MAX}" step="0.5" value="${DEFAULT_MIC_GAIN_DB}" ${connected ? '' : 'disabled'} />
           <input type="number" class="mic-gain-num" data-ch="${i}" min="0" max="${MIC_GAIN_DB_MAX}" step="0.5" value="${DEFAULT_MIC_GAIN_DB}" ${connected ? '' : 'disabled'} />
         `;
@@ -1406,14 +1938,22 @@
 
       for (let ch = 0; ch < waveCanvases.length; ch++) {
         const canvas = waveCanvases[ch];
+        const plot = canvas.parentElement;
+        const displayW = Math.max(200, plot?.clientWidth || 1200);
+        const displayH = Math.max(40, plot?.clientHeight || trackHeightPx());
+        if (canvas.width !== displayW || canvas.height !== displayH) {
+          canvas.width = displayW;
+          canvas.height = displayH;
+        }
+
         const ctx = canvas.getContext('2d');
         const w = canvas.width;
         const h = canvas.height;
         const mid = h / 2;
 
-        ctx.fillStyle = '#d8dce8';
+        ctx.fillStyle = '#f3f4f5';
         ctx.fillRect(0, 0, w, h);
-        ctx.strokeStyle = '#9ca3af';
+        ctx.strokeStyle = '#d1d5db';
         ctx.beginPath();
         ctx.moveTo(0, mid);
         ctx.lineTo(w, mid);
@@ -1421,7 +1961,7 @@
 
         if (span <= 0) continue;
 
-        ctx.strokeStyle = '#2f5ea8';
+        ctx.strokeStyle = '#007da9';
         ctx.lineWidth = 1;
         ctx.beginPath();
         for (let px = 0; px < w; px++) {
@@ -1497,6 +2037,19 @@
       return out;
     }
 
+    function formatPortOptionLabel(label, device) {
+      const full = (label || device || '').trim();
+      if (full.length <= 36) return full;
+      return `${full.slice(0, 33)}…`;
+    }
+
+    function setPortOption(opt, device, label) {
+      opt.value = device;
+      const full = (label || device || '').trim();
+      opt.textContent = formatPortOptionLabel(full, device);
+      if (full && full !== opt.textContent) opt.title = full;
+    }
+
     async function refreshPorts() {
       await detectHttpBridge();
       setupPortUi();
@@ -1504,17 +2057,19 @@
       const select = els.portSelect;
       const prev = select.value;
       select.innerHTML = '';
+      let portCount = 0;
 
       if (useNativeBridge()) {
         const ports = await api().list_ports();
+        portCount = ports.length;
         if (!ports.length) {
-          select.innerHTML = '<option value="">未找到串口（检查 USB 连接）</option>';
+          select.innerHTML = '<option value="">未找到串口 — 请在下方手动填写</option>';
+          updateManualPortUi(0);
           return;
         }
         for (const p of ports) {
           const opt = document.createElement('option');
-          opt.value = p.device;
-          opt.textContent = p.label;
+          setPortOption(opt, p.device, p.label);
           select.appendChild(opt);
         }
       } else if (httpBridge) {
@@ -1522,23 +2077,28 @@
           const res = await fetch('/api/ports', { cache: 'no-store' });
           const json = await res.json();
           const ports = json.ports || [];
+          portCount = ports.length;
           if (!ports.length) {
-            select.innerHTML = '<option value="">未找到 COM 口 - Manual COM 填 COM23</option>';
+            select.innerHTML = '<option value="">未找到 COM 口 — 请在下方手动填写</option>';
+            updateManualPortUi(0);
             return;
           }
           for (const p of ports) {
             const opt = document.createElement('option');
-            opt.value = p.device;
-            opt.textContent = p.label;
+            setPortOption(opt, p.device, p.label);
             select.appendChild(opt);
           }
         } catch (err) {
-          select.innerHTML = '<option value="">桥接错误 - 重启 start_monitor.bat</option>';
+          select.innerHTML = '<option value="">桥接错误 — 重启 start_monitor.bat</option>';
+          updateManualPortUi(0);
+          return;
         }
       } else if ('serial' in navigator) {
         const ports = await navigator.serial.getPorts();
+        portCount = ports.length;
         if (!ports.length) {
-          select.innerHTML = '<option value="">点「连接 COM 口」在弹窗中选择</option>';
+          select.innerHTML = '<option value="">点 Connect 在弹窗中选择设备</option>';
+          updateManualPortUi(0);
           return;
         }
         ports.forEach((port, idx) => {
@@ -1550,9 +2110,12 @@
         });
       } else {
         select.innerHTML = '<option value="">当前浏览器不支持串口</option>';
+        updateManualPortUi(0);
+        return;
       }
 
       if (prev) select.value = prev;
+      updateManualPortUi(portCount);
     }
 
     async function networkStatusPoll() {
@@ -1792,7 +2355,7 @@
     async function disconnectTransport() {
       playbackEnabled = false;
       stopPlayHealthCheck();
-      els.playBtn.textContent = '开启实时播放';
+      els.playBtn.textContent = 'Monitor';
       resetPlayRing();
       syncPlaybackTrackUi();
       if (scriptNode) scriptNode.disconnect();
@@ -1861,11 +2424,32 @@
       return new Blob([header, pcm], { type: 'audio/wav' });
     }
 
+    function buildPcmBlob() {
+      const pcm = new Uint8Array(totalBytes);
+      let offset = 0;
+      for (const part of recordedChunks) {
+        pcm.set(part, offset);
+        offset += part.length;
+      }
+      return new Blob([pcm], { type: 'application/octet-stream' });
+    }
+
     function saveWav() {
       if (!totalBytes) return;
+      const c = cfg();
+      const fmt = document.getElementById('exportFormat')?.value || 'wav';
+      let blob;
+      let name;
+      if (fmt === 'pcm') {
+        blob = buildPcmBlob();
+        name = `record_${c.channels}ch_${c.sampleRate}_${c.bits}bit_${c.endian}.pcm`;
+      } else {
+        blob = buildWav();
+        name = `record_${c.channels}ch_${c.sampleRate}.wav`;
+      }
       const a = document.createElement('a');
-      a.href = URL.createObjectURL(buildWav());
-      a.download = `record_${cfg().channels}ch_${cfg().sampleRate}.wav`;
+      a.href = URL.createObjectURL(blob);
+      a.download = name;
       a.click();
     }
 
@@ -1898,6 +2482,19 @@
     }
 
     els.refreshBtn.addEventListener('click', refreshPorts);
+    if (els.manualPortToggle) {
+      els.manualPortToggle.addEventListener('click', () => {
+        const wrap = els.manualPortWrap;
+        if (!wrap) return;
+        const open = wrap.dataset.open !== '1';
+        wrap.dataset.open = open ? '1' : '0';
+        wrap.hidden = !open;
+        els.manualPortToggle.textContent = open ? 'Hide manual port' : 'Enter port manually…';
+        if (!open && els.manualPort) {
+          els.manualPort.value = '';
+        }
+      });
+    }
     els.connectBtn.addEventListener('click', connectTransport);
     els.disconnectBtn.addEventListener('click', disconnectTransport);
     if (els.transportMode) {
@@ -1942,7 +2539,7 @@
     }
     els.pauseBtn.addEventListener('click', () => {
       streamPaused = !streamPaused;
-      els.pauseBtn.textContent = streamPaused ? '继续' : '暂停';
+      els.pauseBtn.textContent = streamPaused ? 'Resume' : 'Pause';
       setStatus(streamPaused ? 'Paused (waveform frozen)' : 'Connected');
       if (!streamPaused) {
         followLive = true;
@@ -1967,7 +2564,7 @@
           await ensureAudio();
           resetPlayRing();
           playbackEnabled = true;
-          els.playBtn.textContent = '关闭实时播放';
+          els.playBtn.textContent = 'Stop Monitor';
           syncPlaybackTrackUi();
           startPlayHealthCheck();
         } catch (err) {
@@ -1977,7 +2574,7 @@
       } else {
         playbackEnabled = false;
         stopPlayHealthCheck();
-        els.playBtn.textContent = '开启实时播放';
+        els.playBtn.textContent = 'Monitor';
         resetPlayRing();
         syncPlaybackTrackUi();
       }
@@ -2057,6 +2654,101 @@
         console.error('Init failed:', err);
         els.modeHint.textContent = '页面初始化失败，请刷新或重启 start_monitor.bat';
       }
+    })();
+  </script>
+
+  <script>
+    /* Presentation layer for the dashboard skin: drives the segmented
+       transport control, the top status pills and the throughput readout
+       on top of the existing engine (shares its global bindings). */
+    (function () {
+      const $ = (id) => document.getElementById(id);
+      const seg = $('transportSeg');
+      const sel = $('transportMode');
+
+      if (seg && sel) {
+        seg.addEventListener('click', (e) => {
+          const btn = e.target.closest('.seg-btn');
+          if (!btn || btn.classList.contains('active')) return;
+          seg.querySelectorAll('.seg-btn').forEach((b) => b.classList.toggle('active', b === btn));
+          sel.value = btn.dataset.mode;
+          sel.dispatchEvent(new Event('change'));
+        });
+      }
+
+      const zoomIn = $('zoomInBtn');
+      const zoomOut = $('zoomOutBtn');
+      if (zoomIn) zoomIn.addEventListener('click', () => { if (typeof zoomWave === 'function') zoomWave(1 / 1.4, 0.5); });
+      if (zoomOut) zoomOut.addEventListener('click', () => { if (typeof zoomWave === 'function') zoomWave(1.4, 0.5); });
+
+      const heightSlider = $('globalHeightSlider');
+      if (heightSlider) {
+        heightSlider.addEventListener('input', () => {
+          if (typeof applyTrackHeights === 'function') applyTrackHeights();
+          if (typeof drawWaveform === 'function') drawWaveform();
+        });
+      }
+
+      const resetBtn = $('resetGainBtn');
+      if (resetBtn) {
+        resetBtn.addEventListener('click', () => {
+          const def = (typeof DEFAULT_MIC_GAIN_DB === 'number') ? DEFAULT_MIC_GAIN_DB : 30;
+          document.querySelectorAll('.mic-gain-slider').forEach((s) => { s.value = String(def); });
+          document.querySelectorAll('.mic-gain-num').forEach((n) => { n.value = Number(def).toFixed(1); });
+        });
+      }
+
+      const txt = (id) => ($(id)?.textContent || '');
+      const setText = (id, v) => { const e = $(id); if (e && e.textContent !== v) e.textContent = v; };
+
+      let lastBytes = 0;
+      let lastT = performance.now();
+      let lastRate = '0.0 KB/s';
+
+      const fmtRate = (bps) =>
+        bps >= 1e6 ? (bps / 1e6).toFixed(2) + ' MB/s' : (bps / 1e3).toFixed(1) + ' KB/s';
+      const parseBytes = () => {
+        const n = Number(txt('byteCount').replace(/[^0-9]/g, ''));
+        return Number.isFinite(n) ? n : 0;
+      };
+      const maxGain = (typeof MIC_GAIN_DB_MAX === 'number') ? MIC_GAIN_DB_MAX : 36.5;
+
+      function tick() {
+        const mode = sel?.value || 'serial';
+        const modeLabel = mode === 'serial' ? 'Serial' : mode.toUpperCase();
+        setText('pillTransport', modeLabel);
+        setText('connBadge', modeLabel);
+        if (seg) {
+          seg.querySelectorAll('.seg-btn').forEach((b) =>
+            b.classList.toggle('active', b.dataset.mode === mode));
+        }
+
+        const card = $('statusCard');
+        const on = card?.classList.contains('status-connected');
+        setText('pillState', on ? 'Live' : 'Idle');
+        $('pillStateWrap')?.classList.toggle('is-on', !!on);
+
+        setText('pillTime', txt('duration'));
+        setText('pillPeak', txt('peakVal'));
+        setText('pillRms', txt('rmsVal'));
+
+        const now = performance.now();
+        const b = parseBytes();
+        const dt = (now - lastT) / 1000;
+        if (dt >= 0.5) {
+          lastRate = fmtRate(Math.max(0, (b - lastBytes) / dt));
+          lastBytes = b;
+          lastT = now;
+        }
+        setText('throughput', lastRate);
+        setText('pillRate', lastRate);
+
+        const ch = Number($('channels')?.value || 4);
+        setText('micBadge', ch + ' mic · ' + maxGain.toFixed(1) + ' dB');
+      }
+
+      setInterval(tick, 250);
+      tick();
     })();
   </script>
 </body>

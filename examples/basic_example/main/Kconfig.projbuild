@@ -27,6 +27,28 @@ menu "Basic Example"
         range 0 36
         default 30
 
+    config BASIC_EXAMPLE_WIFI_SSID
+        string "WiFi SSID"
+        default "myssid"
+        depends on ESP_AUDIO_PCM_TRANSPORT_TCP || ESP_AUDIO_PCM_TRANSPORT_UDP
+
+    config BASIC_EXAMPLE_WIFI_PASSWORD
+        string "WiFi password"
+        default "mypassword"
+        depends on ESP_AUDIO_PCM_TRANSPORT_TCP || ESP_AUDIO_PCM_TRANSPORT_UDP
+
+    config BASIC_EXAMPLE_WIFI_MAX_RETRY
+        int "WiFi connect max retry"
+        default 10
+        range 1 100
+        depends on ESP_AUDIO_PCM_TRANSPORT_TCP || ESP_AUDIO_PCM_TRANSPORT_UDP
+
+    config BASIC_EXAMPLE_WIFI_CONNECT_TIMEOUT_MS
+        int "WiFi connect timeout (ms)"
+        default 15000
+        range 3000 120000
+        depends on ESP_AUDIO_PCM_TRANSPORT_TCP || ESP_AUDIO_PCM_TRANSPORT_UDP
+
     config RECORD_CHANNELS
         int
         default BASIC_EXAMPLE_RECORD_CHANNELS

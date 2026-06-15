@@ -5,6 +5,7 @@
  */
 
 #include <errno.h>
+#include <inttypes.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -26,7 +27,7 @@
 
 static const char *TAG = "esp_audio_pcm_tcp";
 
-#define TCP_TX_TASK_STACK   4096
+#define TCP_TX_TASK_STACK   6144
 #define TCP_TX_TASK_PRIO    5
 #define TCP_TX_CHUNK        4096
 #define TCP_TX_FALLBACK_BUF 8192
@@ -39,11 +40,17 @@ static const char *TAG = "esp_audio_pcm_tcp";
 typedef struct {
     int sock;
     uint8_t *tx_buf;
+    uint8_t *tx_chunk;
     size_t tx_cap;
     size_t tx_wr;
     size_t tx_rd;
     size_t tx_used;
+    size_t tx_ring_high_water;
+    uint64_t tx_drop_bytes;
+    uint32_t tx_drop_events;
+    TickType_t tx_last_drop_log;
     SemaphoreHandle_t tx_mux;
+    SemaphoreHandle_t sock_mux;
     TaskHandle_t tx_task;
     volatile bool tx_run;
     esp_audio_pcm_handle_t io;
@@ -52,6 +59,20 @@ typedef struct {
 static tcp_ctx_t *tcp_ctx(esp_audio_pcm_handle_t io)
 {
     return (tcp_ctx_t *)io->transport_ctx;
+}
+
+/* Snapshot the current socket fd under the lock. The TX task and the control
+ * RX task share one socket; the TX task may reconnect at any time, so callers
+ * must operate on this snapshot and never on ctx->sock directly. */
+static int tcp_get_sock(tcp_ctx_t *ctx)
+{
+    int sock = -1;
+    if (ctx != NULL && ctx->sock_mux != NULL &&
+        xSemaphoreTake(ctx->sock_mux, portMAX_DELAY) == pdTRUE) {
+        sock = ctx->sock;
+        xSemaphoreGive(ctx->sock_mux);
+    }
+    return sock;
 }
 
 static size_t tcp_want_tx_buf_size(const esp_audio_pcm_tcp_config_t *cfg)
@@ -109,7 +130,36 @@ static size_t ring_write_locked(tcp_ctx_t *ctx, const uint8_t *data, size_t len)
     }
     ctx->tx_wr = (ctx->tx_wr + n) % ctx->tx_cap;
     ctx->tx_used += n;
+    if (ctx->tx_used > ctx->tx_ring_high_water) {
+        ctx->tx_ring_high_water = ctx->tx_used;
+    }
     return n;
+}
+
+static void tcp_note_drop(tcp_ctx_t *ctx, size_t bytes, const char *reason)
+{
+    if (ctx == NULL || bytes == 0) {
+        return;
+    }
+
+    ctx->tx_drop_bytes += (uint64_t)bytes;
+    ctx->tx_drop_events++;
+
+    TickType_t now = xTaskGetTickCount();
+    bool summary = (ctx->tx_last_drop_log == 0) ||
+                   ((now - ctx->tx_last_drop_log) >= pdMS_TO_TICKS(5000));
+    if (summary) {
+        ESP_LOGW(TAG,
+                 "PCM dropped %u B (%s); total %" PRIu64 " B in %u events; "
+                 "ring %u/%u B (high water %u B)",
+                 (unsigned)bytes, reason,
+                 ctx->tx_drop_bytes, (unsigned)ctx->tx_drop_events,
+                 (unsigned)ctx->tx_used, (unsigned)ctx->tx_cap,
+                 (unsigned)ctx->tx_ring_high_water);
+        ctx->tx_last_drop_log = now;
+    } else {
+        ESP_LOGW(TAG, "PCM dropped %u B (%s)", (unsigned)bytes, reason);
+    }
 }
 
 static size_t ring_read_locked(tcp_ctx_t *ctx, uint8_t *data, size_t len)
@@ -139,7 +189,7 @@ static void tcp_wake_tx_task(tcp_ctx_t *ctx)
     }
 }
 
-static void tcp_close_socket(tcp_ctx_t *ctx)
+static void tcp_close_socket_locked(tcp_ctx_t *ctx)
 {
     if (ctx == NULL || ctx->sock < 0) {
         return;
@@ -149,14 +199,35 @@ static void tcp_close_socket(tcp_ctx_t *ctx)
     ctx->sock = -1;
 }
 
+static void tcp_close_socket(tcp_ctx_t *ctx)
+{
+    if (ctx == NULL || ctx->sock_mux == NULL) {
+        return;
+    }
+    xSemaphoreTake(ctx->sock_mux, portMAX_DELAY);
+    tcp_close_socket_locked(ctx);
+    xSemaphoreGive(ctx->sock_mux);
+}
+
+/* Close only if the live socket still matches the snapshot the caller used.
+ * Prevents a read/send error from tearing down a socket that the TX task has
+ * meanwhile replaced with a fresh connection. */
+static void tcp_close_if(tcp_ctx_t *ctx, int sock)
+{
+    if (ctx == NULL || ctx->sock_mux == NULL || sock < 0) {
+        return;
+    }
+    xSemaphoreTake(ctx->sock_mux, portMAX_DELAY);
+    if (ctx->sock == sock) {
+        tcp_close_socket_locked(ctx);
+    }
+    xSemaphoreGive(ctx->sock_mux);
+}
+
 static esp_err_t tcp_connect(esp_audio_pcm_handle_t io)
 {
     const esp_audio_pcm_tcp_config_t *cfg = &io->config.tcp;
     tcp_ctx_t *ctx = tcp_ctx(io);
-
-    if (ctx->sock >= 0) {
-        tcp_close_socket(ctx);
-    }
 
     struct addrinfo hints = {
         .ai_family = AF_INET,
@@ -198,7 +269,14 @@ static esp_err_t tcp_connect(esp_audio_pcm_handle_t io)
     }
     freeaddrinfo(res);
 
+    /* Publish the new socket atomically: drop any stale one and install the
+     * fresh fd under the lock so concurrent read/send paths never observe a
+     * half-open or reused descriptor. */
+    xSemaphoreTake(ctx->sock_mux, portMAX_DELAY);
+    tcp_close_socket_locked(ctx);
     ctx->sock = sock;
+    xSemaphoreGive(ctx->sock_mux);
+
     ESP_LOGI(TAG, "TCP connected to %s:%u", cfg->server_ip, (unsigned)cfg->port);
     tcp_wake_tx_task(ctx);
     return ESP_OK;
@@ -210,7 +288,7 @@ static bool tcp_ensure_connected(esp_audio_pcm_handle_t io)
     if (ctx == NULL) {
         return false;
     }
-    if (ctx->sock >= 0) {
+    if (tcp_get_sock(ctx) >= 0) {
         return true;
     }
     return tcp_connect(io) == ESP_OK;
@@ -218,7 +296,12 @@ static bool tcp_ensure_connected(esp_audio_pcm_handle_t io)
 
 static int tcp_send_chunk(tcp_ctx_t *ctx, const uint8_t *data, size_t len, uint32_t timeout_ms)
 {
-    if (ctx == NULL || ctx->sock < 0 || data == NULL || len == 0) {
+    if (ctx == NULL || data == NULL || len == 0) {
+        return -1;
+    }
+
+    int sock = tcp_get_sock(ctx);
+    if (sock < 0) {
         return -1;
     }
 
@@ -226,11 +309,11 @@ static int tcp_send_chunk(tcp_ctx_t *ctx, const uint8_t *data, size_t len, uint3
         .tv_sec = timeout_ms / 1000,
         .tv_usec = (timeout_ms % 1000) * 1000,
     };
-    setsockopt(ctx->sock, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+    setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
 
     size_t sent = 0;
     while (sent < len) {
-        int n = send(ctx->sock, (const char *)data + sent, len - sent, 0);
+        int n = send(sock, (const char *)data + sent, len - sent, 0);
         if (n > 0) {
             sent += (size_t)n;
             continue;
@@ -240,7 +323,7 @@ static int tcp_send_chunk(tcp_ctx_t *ctx, const uint8_t *data, size_t len, uint3
             continue;
         }
         ESP_LOGW(TAG, "TCP send failed: errno %d", errno);
-        tcp_close_socket(ctx);
+        tcp_close_if(ctx, sock);
         return -1;
     }
     return (int)sent;
@@ -250,7 +333,14 @@ static void tcp_tx_task(void *arg)
 {
     esp_audio_pcm_handle_t io = (esp_audio_pcm_handle_t)arg;
     tcp_ctx_t *ctx = tcp_ctx(io);
-    uint8_t chunk[TCP_TX_CHUNK];
+    if (ctx == NULL) {
+        vTaskDelete(NULL);
+        return;
+    }
+    if (ctx->tx_chunk == NULL) {
+        vTaskDelete(NULL);
+        return;
+    }
 
     while (ctx->tx_run) {
         (void)ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(50));
@@ -266,19 +356,22 @@ static void tcp_tx_task(void *arg)
 
             size_t n = 0;
             if (xSemaphoreTake(ctx->tx_mux, pdMS_TO_TICKS(100)) == pdTRUE) {
-                n = ring_read_locked(ctx, chunk, sizeof(chunk));
+                n = ring_read_locked(ctx, ctx->tx_chunk, TCP_TX_CHUNK);
                 xSemaphoreGive(ctx->tx_mux);
             }
             if (n == 0) {
                 break;
             }
 
-            if (tcp_send_chunk(ctx, chunk, n, 500) < 0) {
+            if (tcp_send_chunk(ctx, ctx->tx_chunk, n, 500) < 0) {
                 break;
             }
         }
     }
 
+    if (ctx != NULL) {
+        ctx->tx_task = NULL;
+    }
     vTaskDelete(NULL);
 }
 
@@ -298,24 +391,44 @@ static esp_err_t tcp_init(esp_audio_pcm_handle_t io)
         return ESP_ERR_NO_MEM;
     }
 
+    ctx->tx_chunk = heap_caps_malloc(TCP_TX_CHUNK, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    if (ctx->tx_chunk == NULL) {
+        heap_caps_free(ctx->tx_buf);
+        free(ctx);
+        return ESP_ERR_NO_MEM;
+    }
+
     ctx->tx_mux = xSemaphoreCreateMutex();
-    if (ctx->tx_mux == NULL) {
+    ctx->sock_mux = xSemaphoreCreateMutex();
+    if (ctx->tx_mux == NULL || ctx->sock_mux == NULL) {
+        if (ctx->tx_mux != NULL) {
+            vSemaphoreDelete(ctx->tx_mux);
+        }
+        if (ctx->sock_mux != NULL) {
+            vSemaphoreDelete(ctx->sock_mux);
+        }
+        heap_caps_free(ctx->tx_chunk);
         heap_caps_free(ctx->tx_buf);
         free(ctx);
         return ESP_ERR_NO_MEM;
     }
 
     ctx->tx_run = true;
+    io->transport_ctx = ctx;
+
     BaseType_t ok = xTaskCreate(tcp_tx_task, "pcm_tcp_tx", TCP_TX_TASK_STACK, io,
                                 TCP_TX_TASK_PRIO, &ctx->tx_task);
     if (ok != pdPASS) {
+        io->transport_ctx = NULL;
+        ctx->tx_run = false;
         vSemaphoreDelete(ctx->tx_mux);
+        vSemaphoreDelete(ctx->sock_mux);
+        heap_caps_free(ctx->tx_chunk);
         heap_caps_free(ctx->tx_buf);
         free(ctx);
         return ESP_ERR_NO_MEM;
     }
 
-    io->transport_ctx = ctx;
 #if CONFIG_SPIRAM
     const char *where = esp_ptr_external_ram(ctx->tx_buf) ? "PSRAM" : "internal";
 #else
@@ -335,14 +448,31 @@ static esp_err_t tcp_deinit(esp_audio_pcm_handle_t io)
     ctx->tx_run = false;
     tcp_close_socket(ctx);
     tcp_wake_tx_task(ctx);
+    if (ctx->tx_used > 0) {
+        ESP_LOGW(TAG, "TCP deinit with %u B still in TX ring (not sent to PC)",
+                 (unsigned)ctx->tx_used);
+    }
+    if (ctx->tx_drop_bytes > 0) {
+        ESP_LOGW(TAG, "TCP session drop stats: %" PRIu64 " B in %u events; ring high water %u B",
+                 ctx->tx_drop_bytes, (unsigned)ctx->tx_drop_events,
+                 (unsigned)ctx->tx_ring_high_water);
+    }
     vTaskDelay(pdMS_TO_TICKS(50));
-    if (ctx->tx_task != NULL) {
-        vTaskDelete(ctx->tx_task);
-        ctx->tx_task = NULL;
+    TickType_t wait_start = xTaskGetTickCount();
+    while (ctx->tx_task != NULL) {
+        if ((xTaskGetTickCount() - wait_start) > pdMS_TO_TICKS(2000)) {
+            ESP_LOGW(TAG, "TX task did not exit cleanly");
+            break;
+        }
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
     if (ctx->tx_mux != NULL) {
         vSemaphoreDelete(ctx->tx_mux);
     }
+    if (ctx->sock_mux != NULL) {
+        vSemaphoreDelete(ctx->sock_mux);
+    }
+    heap_caps_free(ctx->tx_chunk);
     heap_caps_free(ctx->tx_buf);
     free(ctx);
     io->transport_ctx = NULL;
@@ -363,7 +493,12 @@ static esp_err_t tcp_close(esp_audio_pcm_handle_t io)
 static int tcp_read(esp_audio_pcm_handle_t io, void *buf, size_t len, uint32_t timeout_ms)
 {
     tcp_ctx_t *ctx = tcp_ctx(io);
-    if (ctx == NULL || ctx->sock < 0 || buf == NULL || len == 0) {
+    if (ctx == NULL || buf == NULL || len == 0) {
+        return -1;
+    }
+
+    int sock = tcp_get_sock(ctx);
+    if (sock < 0) {
         return -1;
     }
 
@@ -371,22 +506,22 @@ static int tcp_read(esp_audio_pcm_handle_t io, void *buf, size_t len, uint32_t t
         .tv_sec = timeout_ms / 1000,
         .tv_usec = (timeout_ms % 1000) * 1000,
     };
-    setsockopt(ctx->sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
-    int n = recv(ctx->sock, buf, len, 0);
+    int n = recv(sock, buf, len, 0);
     if (n > 0) {
         return n;
     }
     if (n == 0) {
         ESP_LOGW(TAG, "TCP peer closed");
-        tcp_close_socket(ctx);
+        tcp_close_if(ctx, sock);
         return -1;
     }
     if (errno == EAGAIN || errno == EWOULDBLOCK) {
         return 0;
     }
     ESP_LOGW(TAG, "TCP recv failed: errno %d", errno);
-    tcp_close_socket(ctx);
+    tcp_close_if(ctx, sock);
     return -1;
 }
 
@@ -396,15 +531,27 @@ static int tcp_write(esp_audio_pcm_handle_t io, const void *data, size_t len, ui
     if (ctx == NULL || data == NULL || len == 0 || ctx->tx_buf == NULL || ctx->tx_mux == NULL) {
         return -1;
     }
+    if (!ctx->tx_run) {
+        tcp_note_drop(ctx, len, "transport stopped");
+        errno = ENOMEM;
+        return -1;
+    }
 
     const uint8_t *src = (const uint8_t *)data;
     size_t written = 0;
     TickType_t start = xTaskGetTickCount();
-    const TickType_t wait_ticks = (timeout_ms == 0)
-        ? 0
-        : pdMS_TO_TICKS(timeout_ms > 0 ? timeout_ms : 5000);
+#if defined(CONFIG_ESP_AUDIO_PCM_TCP_BLOCK_ON_FULL) && CONFIG_ESP_AUDIO_PCM_TCP_BLOCK_ON_FULL
+    const bool block_on_full = true;
+#else
+    const bool block_on_full = false;
+#endif
+    const TickType_t wait_ticks = block_on_full
+        ? portMAX_DELAY
+        : ((timeout_ms == 0)
+               ? 0
+               : pdMS_TO_TICKS(timeout_ms > 0 ? timeout_ms : 5000));
 
-    while (written < len) {
+    while (written < len && ctx->tx_run) {
         size_t chunk = 0;
         if (xSemaphoreTake(ctx->tx_mux, pdMS_TO_TICKS(100)) == pdTRUE) {
             chunk = ring_write_locked(ctx, src + written, len - written);
@@ -416,19 +563,32 @@ static int tcp_write(esp_audio_pcm_handle_t io, const void *data, size_t len, ui
             continue;
         }
 
-        if (wait_ticks == 0) {
-            break;
-        }
-        if ((xTaskGetTickCount() - start) >= wait_ticks) {
-            break;
+        if (!block_on_full) {
+            if (wait_ticks == 0) {
+                break;
+            }
+            if ((xTaskGetTickCount() - start) >= wait_ticks) {
+                break;
+            }
         }
         tcp_wake_tx_task(ctx);
         vTaskDelay(pdMS_TO_TICKS(1));
     }
 
-    if (written > 0) {
+    if (written == len) {
         return (int)written;
     }
+
+    size_t dropped = len - written;
+    if (dropped > 0) {
+        const char *reason = ctx->tx_run ? "TX ring full (timeout)" : "transport stopped";
+        tcp_note_drop(ctx, dropped, reason);
+    }
+    if (written > 0) {
+        errno = ENOMEM;
+        return (int)written;
+    }
+    errno = ENOMEM;
     return -1;
 }
 

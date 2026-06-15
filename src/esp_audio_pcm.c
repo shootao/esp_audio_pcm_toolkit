@@ -189,6 +189,7 @@ esp_err_t esp_audio_pcm_open(esp_audio_pcm_handle_t io)
         return ESP_ERR_INVALID_ARG;
     }
     if (!io->initialized) {
+        ESP_LOGE(TAG, "esp_audio_pcm_open: not initialized; call esp_audio_pcm_new() first");
         return ESP_ERR_INVALID_STATE;
     }
     if (io->opened) {
@@ -198,6 +199,8 @@ esp_err_t esp_audio_pcm_open(esp_audio_pcm_handle_t io)
     esp_err_t ret = io->ops->open(io);
     if (ret == ESP_OK) {
         io->opened = true;
+    } else if (ret == ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(TAG, "esp_audio_pcm_open: transport open failed (INVALID_STATE)");
     }
     return ret;
 }
@@ -279,22 +282,35 @@ esp_err_t esp_audio_pcm_write(esp_audio_pcm_handle_t io, const void *data, size_
         return ESP_ERR_INVALID_STATE;
     }
 
-    for (int retry = 0; retry < ESP_AUDIO_PCM_WRITE_RETRY_MAX; retry++) {
-        int sent = io->ops->write(io, data, len, timeout_ms);
-        if (sent == (int)len) {
-            return ESP_OK;
-        }
-        if (sent >= 0) {
+    const uint8_t *ptr = (const uint8_t *)data;
+    size_t remain = len;
+
+    for (int retry = 0; retry < ESP_AUDIO_PCM_WRITE_RETRY_MAX && remain > 0; retry++) {
+        errno = 0;
+        int sent = io->ops->write(io, ptr, remain, timeout_ms);
+        if (sent > 0) {
+            ptr += (size_t)sent;
+            remain -= (size_t)sent;
+            if (remain == 0) {
+                return ESP_OK;
+            }
             continue;
         }
-#if defined(errno) && (errno != 0)
-        if (errno != ENOMEM && errno != EAGAIN) {
+        /* sent <= 0: only keep retrying on transient back-pressure; any other
+         * errno (e.g. connection error) should fail fast. errno == 0 means the
+         * transport returned -1 without a syscall error (e.g. ring buffer full),
+         * which is also transient and worth retrying. */
+        int err = errno;
+        if (err != 0 && err != ENOMEM && err != EAGAIN && err != EWOULDBLOCK) {
             return ESP_FAIL;
         }
-#endif
         vTaskDelay(pdMS_TO_TICKS(1 + retry));
     }
 
+    if (remain > 0) {
+        ESP_LOGW(TAG, "pcm write incomplete: %u/%u bytes not queued (transport=%d)",
+                 (unsigned)remain, (unsigned)len, (int)io->config.type);
+    }
     return ESP_ERR_NO_MEM;
 }
 

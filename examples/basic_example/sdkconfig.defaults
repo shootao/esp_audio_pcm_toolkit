@@ -1,3 +1,7 @@
 CONFIG_IDF_TARGET="esp32s3"
 
+# Console on UART0; USB Serial/JTAG used for PCM when transport=USB.
 CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+
+# Default PCM transport (override in menuconfig).
+CONFIG_ESP_AUDIO_PCM_TRANSPORT_USB=y

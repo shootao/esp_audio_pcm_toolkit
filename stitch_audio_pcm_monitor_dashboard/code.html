@@ -1,0 +1,515 @@
+<!DOCTYPE html><html class="light" lang="en" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>PCM Monitor Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;family=JetBrains+Mono:wght@100..900&amp;display=swap" rel="stylesheet">
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .waveform-bg {
+            background-image: linear-gradient(to right, #e5e7eb 1px, transparent 1px),
+                              linear-gradient(to bottom, #e5e7eb 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-dim": "#d9dadb",
+                        "on-primary-fixed": "#410001",
+                        "on-primary-container": "#fffbff",
+                        "on-secondary-container": "#526478",
+                        "surface": "#f8f9fa",
+                        "inverse-primary": "#ffb4aa",
+                        "error": "#ba1a1a",
+                        "surface-bright": "#f8f9fa",
+                        "primary-fixed": "#ffdad5",
+                        "on-secondary-fixed-variant": "#36485b",
+                        "on-surface-variant": "#5c403c",
+                        "on-tertiary-fixed": "#001e2c",
+                        "on-error-container": "#93000a",
+                        "secondary": "#4e6073",
+                        "surface-tint": "#bd1112",
+                        "on-primary": "#ffffff",
+                        "primary-container": "#de2e26",
+                        "secondary-fixed": "#d1e4fb",
+                        "tertiary-fixed": "#c4e7ff",
+                        "secondary-fixed-dim": "#b5c8df",
+                        "inverse-surface": "#2e3132",
+                        "on-primary-fixed-variant": "#930007",
+                        "error-container": "#ffdad6",
+                        "on-surface": "#191c1d",
+                        "surface-container-high": "#e7e8e9",
+                        "tertiary": "#006387",
+                        "inverse-on-surface": "#f0f1f2",
+                        "on-secondary": "#ffffff",
+                        "on-tertiary-container": "#fbfcff",
+                        "outline": "#916f6b",
+                        "surface-container": "#edeeef",
+                        "surface-container-highest": "#e1e3e4",
+                        "on-tertiary": "#ffffff",
+                        "primary": "#b90c10",
+                        "secondary-container": "#cfe2f9",
+                        "background": "#f8f9fa",
+                        "on-secondary-fixed": "#091d2e",
+                        "tertiary-fixed-dim": "#7bd0ff",
+                        "on-background": "#191c1d",
+                        "tertiary-container": "#007da9",
+                        "outline-variant": "#e5bdb8",
+                        "surface-variant": "#e1e3e4",
+                        "surface-container-low": "#f3f4f5",
+                        "surface-container-lowest": "#ffffff",
+                        "on-error": "#ffffff",
+                        "on-tertiary-fixed-variant": "#004c69",
+                        "primary-fixed-dim": "#ffb4aa"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "base": "4px",
+                        "container-max": "1440px",
+                        "xl": "32px",
+                        "xs": "4px",
+                        "lg": "24px",
+                        "md": "16px",
+                        "sm": "8px",
+                        "sidebar-width": "320px"
+                    },
+                    "fontFamily": {
+                        "label-md": ["JetBrains Mono"],
+                        "label-xs": ["JetBrains Mono"],
+                        "headline-lg": ["JetBrains Mono"],
+                        "headline-md": ["JetBrains Mono"],
+                        "body-sm": ["Inter"],
+                        "body-md": ["Inter"],
+                        "code-block": ["JetBrains Mono"]
+                    },
+                    "fontSize": {
+                        "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "500"}],
+                        "label-xs": ["10px", {"lineHeight": "12px", "fontWeight": "500"}],
+                        "headline-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "headline-md": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                        "body-sm": ["12px", {"lineHeight": "16px", "fontWeight": "400"}],
+                        "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "code-block": ["13px", {"lineHeight": "18px", "fontWeight": "400"}]
+                    }
+                },
+            },
+        }
+    </script>
+</head>
+<body class="bg-background text-on-surface font-body-md overflow-x-hidden">
+<!-- TopNavBar -->
+<header class="sticky top-0 z-50 flex justify-between items-center w-full px-lg py-sm bg-surface dark:bg-inverse-surface border-b border-outline-variant dark:border-outline shadow-sm">
+<div class="flex items-baseline gap-md">
+<span class="text-headline-md font-headline-md font-bold text-primary dark:text-primary-fixed-dim">PCM Monitor</span>
+<span class="text-label-xs font-label-xs text-on-surface-variant opacity-60">v1.0.0-stable</span>
+</div>
+<div class="hidden md:flex items-center gap-sm">
+<div class="flex items-center gap-xs px-sm py-1 rounded-full bg-surface-container text-on-surface-variant text-label-md font-label-md"><span class="w-2 h-2 rounded-full bg-primary"></span> Transport: Serial</div>
+<div class="flex items-center gap-xs px-sm py-1 rounded-full bg-surface-container text-on-surface-variant text-label-md font-label-md">
+                State
+            </div>
+<div class="flex items-center gap-xs px-sm py-1 rounded-full bg-surface-container text-on-surface-variant text-label-md font-label-md">
+                Rate
+            </div>
+<div class="flex items-center gap-xs px-sm py-1 rounded-full bg-surface-container text-on-surface-variant text-label-md font-label-md">
+                Time
+            </div>
+<div class="flex items-center gap-xs px-sm py-1 rounded-full bg-surface-container text-on-surface-variant text-label-md font-label-md">
+                Peak
+            </div>
+<div class="flex items-center gap-xs px-sm py-1 rounded-full bg-surface-container text-on-surface-variant text-label-md font-label-md">
+                RMS
+            </div>
+<div class="flex items-center gap-sm ml-md text-on-surface-variant">
+<button class="material-symbols-outlined cursor-pointer hover:text-primary">settings</button>
+<button class="material-symbols-outlined cursor-pointer hover:text-primary">help</button>
+<button class="material-symbols-outlined cursor-pointer hover:text-primary">account_circle</button>
+</div>
+</div>
+</header>
+<div class="flex flex-col lg:flex-row min-h-screen">
+<!-- Left Sidebar -->
+<aside class="w-full lg:w-sidebar-width flex-shrink-0 p-md space-y-md bg-surface-container-low border-r border-outline-variant overflow-y-auto">
+<!-- Connection Card -->
+<section class="bg-surface-container-lowest p-md rounded-xl border border-outline-variant shadow-sm">
+<div class="flex items-center gap-sm mb-md">
+<span class="material-symbols-outlined text-primary">settings_input_component</span>
+<h2 class="text-label-md font-bold uppercase tracking-wider text-on-surface">Connection</h2>
+</div>
+<div class="bg-surface-container p-1 rounded-lg flex mb-md">
+<button class="flex-1 text-label-xs py-1 rounded bg-surface-container-lowest shadow-sm font-semibold text-on-surface">Serial</button>
+<button class="flex-1 text-label-xs py-1 text-on-surface-variant hover:text-on-surface">TCP</button>
+<button class="flex-1 text-label-xs py-1 text-on-surface-variant hover:text-on-surface">UDP</button>
+</div>
+<div class="space-y-sm">
+<div>
+<label class="text-label-xs text-on-surface-variant mb-1 block">Serial Port</label>
+<div class="flex gap-xs">
+<select class="flex-1 bg-surface-container-low border border-outline-variant rounded px-2 py-1 text-body-sm focus:outline-none focus:ring-1 focus:ring-primary">
+<option>COM3 - ESP32 Bridge</option>
+<option>COM7 - Debug Console</option>
+</select>
+<button class="p-1 bg-surface-container hover:bg-surface-container-high rounded border border-outline-variant transition-colors">
+<span class="material-symbols-outlined text-sm">refresh</span>
+</button>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-sm">
+<div>
+<label class="text-label-xs text-on-surface-variant mb-1 block">Port</label>
+<input class="w-full bg-surface-container-low border border-outline-variant rounded px-2 py-1 text-body-sm" type="text" value="COM3">
+</div>
+<div>
+<label class="text-label-xs text-on-surface-variant mb-1 block">Baud Rate</label>
+<input class="w-full bg-surface-container-low border border-outline-variant rounded px-2 py-1 text-body-sm" type="text" value="115200">
+</div>
+</div>
+<div class="flex gap-sm pt-md">
+<button class="flex-1 bg-primary-container text-on-primary-container py-2 rounded-lg font-bold text-label-md hover:brightness-110 active:scale-[0.98] transition-all">Connect</button>
+<button class="flex-1 border border-outline text-primary py-2 rounded-lg font-bold text-label-md hover:bg-primary/5 active:scale-[0.98] transition-all">Disconnect</button>
+</div>
+</div>
+</section>
+<!-- PCM Format Card -->
+<section class="bg-surface-container-lowest p-md rounded-xl border border-outline-variant shadow-sm">
+<div class="flex items-center gap-sm mb-md">
+<span class="material-symbols-outlined text-primary">format_list_bulleted</span>
+<h2 class="text-label-md font-bold uppercase tracking-wider text-on-surface">PCM Format</h2>
+</div>
+<div class="grid grid-cols-2 gap-x-md gap-y-sm">
+<div>
+<label class="text-label-xs text-on-surface-variant block">Sample Rate</label>
+<input class="w-full bg-surface-container-low border border-outline-variant rounded px-2 py-1 text-body-sm focus:ring-1 focus:ring-primary" type="text" value="16000">
+</div>
+<div>
+<label class="text-label-xs text-on-surface-variant block">Channels</label>
+<select class="w-full bg-surface-container-low border border-outline-variant rounded px-2 py-1 text-body-sm focus:ring-1 focus:ring-primary">
+  <option value="0">0</option>
+  <option value="1">1</option>
+  <option value="2">2</option>
+  <option value="3">3</option>
+  <option value="4" selected="">4</option>
+  <option value="5">5</option>
+  <option value="6">6</option>
+  <option value="7">7</option>
+  <option value="8">8</option>
+</select>
+</div>
+<div>
+<label class="text-label-xs text-on-surface-variant block">Bits</label>
+<select class="w-full bg-surface-container-low border border-outline-variant rounded px-2 py-1 text-body-sm">
+<option>16-bit</option>
+<option>24-bit</option>
+<option>32-bit</option>
+</select>
+</div>
+<div>
+<label class="text-label-xs text-on-surface-variant block">Endian</label>
+<select class="w-full bg-surface-container-low border border-outline-variant rounded px-2 py-1 text-body-sm">
+<option>LE</option>
+<option>BE</option>
+</select>
+</div>
+<div class="col-span-2">
+<label class="text-label-xs text-on-surface-variant block">Wave Window</label>
+<input class="w-full bg-surface-container-low border border-outline-variant rounded px-2 py-1 text-body-sm" type="text" value="4096 Samples">
+</div>
+</div>
+</section>
+<!-- Audio Control Card -->
+<section class="bg-surface-container-lowest p-md rounded-xl border border-outline-variant shadow-sm">
+<div class="flex justify-between items-center mb-md">
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-primary">equalizer</span>
+<h2 class="text-label-md font-bold uppercase tracking-wider text-on-surface">Audio Control</h2>
+</div>
+<span class="px-2 py-0.5 bg-surface-container-high rounded text-label-xs font-label-xs text-secondary">4 mic · 36.5 dB</span>
+</div>
+<div class="space-y-2 mb-md">
+<!-- Sliders 0-3 -->
+<template id="slider-row">
+<div class="flex items-center gap-md">
+<span class="text-label-xs font-label-xs w-6 text-on-surface-variant">CH</span>
+<input class="flex-1 h-1 bg-surface-container rounded-lg appearance-none cursor-pointer accent-primary" type="range">
+<input class="w-8 bg-surface-container-low border border-outline-variant rounded text-center text-label-xs py-0.5" type="text" value="32">
+</div>
+</template>
+<div class="space-y-2 max-h-48 overflow-y-auto pr-1" id="slider-container">
+<!-- JS fills this for CH0-CH3 -->
+
+<div class="flex items-center gap-md">
+<span class="text-label-xs font-label-xs w-6 text-on-surface-variant">CH0</span>
+<input class="flex-1 h-1 bg-surface-container rounded-lg appearance-none cursor-pointer accent-primary" type="range">
+<input class="w-8 bg-surface-container-low border border-outline-variant rounded text-center text-label-xs py-0.5" type="text" value="32">
+</div>
+
+<div class="flex items-center gap-md">
+<span class="text-label-xs font-label-xs w-6 text-on-surface-variant">CH1</span>
+<input class="flex-1 h-1 bg-surface-container rounded-lg appearance-none cursor-pointer accent-primary" type="range">
+<input class="w-8 bg-surface-container-low border border-outline-variant rounded text-center text-label-xs py-0.5" type="text" value="32">
+</div>
+
+<div class="flex items-center gap-md">
+<span class="text-label-xs font-label-xs w-6 text-on-surface-variant">CH2</span>
+<input class="flex-1 h-1 bg-surface-container rounded-lg appearance-none cursor-pointer accent-primary" type="range">
+<input class="w-8 bg-surface-container-low border border-outline-variant rounded text-center text-label-xs py-0.5" type="text" value="32">
+</div>
+
+<div class="flex items-center gap-md">
+<span class="text-label-xs font-label-xs w-6 text-on-surface-variant">CH3</span>
+<input class="flex-1 h-1 bg-surface-container rounded-lg appearance-none cursor-pointer accent-primary" type="range">
+<input class="w-8 bg-surface-container-low border border-outline-variant rounded text-center text-label-xs py-0.5" type="text" value="32">
+</div>
+</div>
+</div>
+<div class="border-t border-outline-variant pt-md">
+<div class="flex items-center gap-md mb-md">
+<span class="material-symbols-outlined text-primary text-lg">volume_up</span>
+<input class="flex-1 h-2 bg-surface-container rounded-lg appearance-none cursor-pointer accent-primary" type="range">
+</div>
+<div class="flex gap-sm">
+<button class="flex-1 bg-primary-container text-on-primary-container py-2 rounded-lg font-bold text-label-md hover:brightness-110">Apply Controls</button>
+<button class="flex-1 border border-outline text-primary py-2 rounded-lg font-bold text-label-md hover:bg-primary/5">Reset Gain</button>
+</div>
+</div>
+</section>
+</aside>
+<!-- Main Column -->
+<main class="flex-1 p-md flex flex-col gap-md">
+<!-- Toolbar -->
+<div class="flex flex-wrap items-center justify-between bg-surface-container-lowest p-sm px-md rounded-xl border border-outline-variant shadow-sm gap-md">
+<div class="flex items-center gap-sm">
+<div class="flex items-center gap-2 px-3 py-1 bg-green-50 text-green-700 rounded-full border border-green-200">
+<span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+<span class="text-label-md font-semibold">STREAMING</span>
+</div>
+<span class="text-body-sm text-on-surface-variant opacity-60">|</span>
+<span class="text-body-sm font-label-md">00:04:12.831</span>
+</div>
+<div class="flex flex-wrap items-center gap-sm">
+<button class="flex items-center gap-1 px-3 py-1.5 bg-surface-container hover:bg-surface-container-high rounded-lg text-label-md transition-colors">
+<span class="material-symbols-outlined text-[20px]">live_tv</span> Follow Live
+                    </button>
+<button class="flex items-center gap-1 px-3 py-1.5 bg-surface-container hover:bg-surface-container-high rounded-lg text-label-md transition-colors">
+<span class="material-symbols-outlined text-[20px]">pause</span> Pause
+                    </button>
+<button class="flex items-center gap-1 px-3 py-1.5 bg-surface-container hover:bg-surface-container-high rounded-lg text-label-md transition-colors">
+<span class="material-symbols-outlined text-[20px]">monitor</span> Monitor
+                    </button>
+<div class="h-6 w-px bg-outline-variant mx-1"></div>
+<select class="bg-surface-container hover:bg-surface-container-high border-none rounded-lg text-label-md px-3 py-1.5 focus:ring-0">
+<option>Hex View</option>
+<option>Decimal</option>
+<option>Float Norm</option>
+</select>
+<button class="p-1.5 text-on-surface-variant hover:text-primary transition-colors"><span class="material-symbols-outlined">save</span></button>
+<button class="p-1.5 text-on-surface-variant hover:text-primary transition-colors"><span class="material-symbols-outlined">delete_sweep</span></button>
+</div>
+</div>
+<!-- Stat Strip -->
+<div class="grid grid-cols-2 md:grid-cols-5 gap-md">
+<div class="bg-surface-container-lowest p-md rounded-xl border border-outline-variant shadow-sm">
+<div class="text-label-xs text-on-surface-variant uppercase mb-1">Bytes Received</div>
+<div class="text-headline-md font-headline-md font-bold">128.4 MB</div>
+</div>
+<div class="bg-surface-container-lowest p-md rounded-xl border border-outline-variant shadow-sm">
+<div class="text-label-xs text-on-surface-variant uppercase mb-1">Duration</div>
+<div class="text-headline-md font-headline-md font-bold">04:12.8</div>
+</div>
+<div class="bg-surface-container-lowest p-md rounded-xl border border-outline-variant shadow-sm">
+<div class="text-label-xs text-on-surface-variant uppercase mb-1">Throughput</div>
+<div class="text-headline-md font-headline-md font-bold text-primary">1.02 Mbps</div>
+</div>
+<div class="bg-surface-container-lowest p-md rounded-xl border border-outline-variant shadow-sm">
+<div class="text-label-xs text-on-surface-variant uppercase mb-1">Peak Level</div>
+<div class="text-headline-md font-headline-md font-bold">-3.2 dBFS</div>
+</div>
+<div class="bg-surface-container-lowest p-md rounded-xl border border-outline-variant shadow-sm">
+<div class="text-label-xs text-on-surface-variant uppercase mb-1">RMS Power</div>
+<div class="text-headline-md font-headline-md font-bold">-18.4 dB</div>
+</div>
+</div>
+<!-- Meter Bar -->
+<div class="w-full h-4 bg-surface-container-high rounded-full overflow-hidden border border-outline-variant">
+<div class="h-full bg-gradient-to-r from-green-500 via-yellow-400 to-primary" style="width: 72%;"></div>
+</div>
+<!-- Waveform Card -->
+<div class="flex-1 bg-surface-container-lowest rounded-xl border border-outline-variant shadow-sm flex flex-col overflow-hidden">
+<div class="p-md border-b border-outline-variant flex justify-between items-center">
+<div class="flex items-center gap-md">
+<h2 class="text-headline-md font-bold">Waveform</h2>
+<span class="px-3 py-1 bg-surface-container-high rounded-full text-label-xs font-label-xs text-on-surface-variant">16000 Hz · 4 ch · 16 LE</span>
+</div>
+<div class="flex items-center gap-sm">
+<div class="flex items-center gap-xs px-2 border-r border-outline-variant mr-1 group">
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">height</span>
+<input class="w-24 h-1 bg-surface-container rounded-lg appearance-none cursor-pointer accent-primary" id="global-height-slider" max="400" min="40" type="range" value="128">
+</div>
+<button class="material-symbols-outlined p-1 hover:bg-surface-container rounded transition-colors">zoom_in</button>
+<button class="material-symbols-outlined p-1 hover:bg-surface-container rounded transition-colors">zoom_out</button>
+<button class="material-symbols-outlined p-1 hover:bg-surface-container rounded transition-colors">settings_overscan</button>
+</div>
+</div>
+<!-- Channels List -->
+<div class="flex-1 overflow-y-auto p-md space-y-md" id="waveform-list">
+<div class="space-y-4" id="waveform-rows">
+<!-- Row 0 -->
+<div class="waveform-row flex gap-md h-32">
+<div class="waveform-sidebar w-32 flex flex-col justify-between p-sm bg-surface-container-low border border-outline-variant rounded-lg shrink-0">
+<div>
+<div class="text-label-md font-bold">CH0</div>
+<div class="text-label-xs text-on-surface-variant">Input Stage</div>
+</div>
+<button class="w-full py-1 text-label-xs border border-outline rounded hover:bg-surface-container-high">MUTE</button>
+</div>
+<div class="waveform-plot flex-1 bg-surface-container-low border border-outline-variant rounded-lg overflow-hidden relative waveform-bg">
+<svg class="absolute inset-0 w-full h-full" preserveAspectRatio="none" viewBox="0 0 1000 100">
+<path d="M0,50 L50,45 L100,55 L150,30 L200,70 L250,50 L300,40 L350,60 L400,20 L450,80 L500,50 L550,48 L600,52 L650,10 L700,90 L750,50 L800,45 L850,55 L900,30 L950,70 L1000,50" fill="none" stroke="#007da9" stroke-width="1.5" style="transform: translateX(3.41124px);"></path>
+</svg>
+<div class="absolute top-2 right-2 text-label-xs font-label-xs bg-white/80 px-1 rounded border border-outline-variant">Active</div>
+</div>
+</div>
+<!-- Row 1 -->
+<div class="waveform-row flex gap-md h-32 opacity-80">
+<div class="waveform-sidebar w-32 flex flex-col justify-between p-sm bg-surface-container-low border border-outline-variant rounded-lg shrink-0">
+<div>
+<div class="text-label-md font-bold">CH1</div>
+<div class="text-label-xs text-on-surface-variant">L-Mic High</div>
+</div>
+<button class="w-full py-1 text-label-xs border border-outline rounded bg-primary text-white">MUTED</button>
+</div>
+<div class="waveform-plot flex-1 bg-surface-container-low border border-outline-variant rounded-lg overflow-hidden relative waveform-bg">
+<div class="absolute inset-0 flex items-center justify-center bg-surface-container-high/20 backdrop-blur-[1px]">
+<span class="text-label-xs font-label-xs uppercase tracking-widest text-on-surface-variant">No Data Signal</span>
+</div>
+<svg class="absolute inset-0 w-full h-full opacity-30" preserveAspectRatio="none" viewBox="0 0 1000 100">
+<path d="M0,50 L1000,50" fill="none" stroke="#007da9" stroke-width="1" style="transform: translateX(3.41124px);"></path>
+</svg>
+</div>
+</div>
+<!-- Row 2 -->
+<div class="waveform-row flex gap-md h-32">
+<div class="waveform-sidebar w-32 flex flex-col justify-between p-sm bg-surface-container-low border border-outline-variant rounded-lg shrink-0">
+<div>
+<div class="text-label-md font-bold">CH2</div>
+<div class="text-label-xs text-on-surface-variant">R-Mic High</div>
+</div>
+<button class="w-full py-1 text-label-xs border border-outline rounded hover:bg-surface-container-high">MUTE</button>
+</div>
+<div class="waveform-plot flex-1 bg-surface-container-low border border-outline-variant rounded-lg overflow-hidden relative waveform-bg">
+<svg class="absolute inset-0 w-full h-full" preserveAspectRatio="none" viewBox="0 0 1000 100">
+<path d="M0,50 Q50,20 100,50 T200,50 T300,50 T400,50 T500,50 T600,50 T700,50 T800,50 T900,50 T1000,50" fill="none" stroke="#007da9" stroke-width="1.5" style="transform: translateX(3.41124px);"></path>
+</svg>
+</div>
+</div>
+<!-- Row 3 -->
+<div class="waveform-row flex gap-md h-32">
+<div class="waveform-sidebar w-32 flex flex-col justify-between p-sm bg-surface-container-low border border-outline-variant rounded-lg shrink-0">
+<div>
+<div class="text-label-md font-bold">CH3</div>
+<div class="text-label-xs text-on-surface-variant">Reference</div>
+</div>
+<button class="w-full py-1 text-label-xs border border-outline rounded hover:bg-surface-container-high">MUTE</button>
+</div>
+<div class="waveform-plot flex-1 bg-surface-container-low border border-outline-variant rounded-lg overflow-hidden relative waveform-bg">
+<svg class="absolute inset-0 w-full h-full" preserveAspectRatio="none" viewBox="0 0 1000 100">
+<path d="M0,50 L20,40 L40,60 L60,50 L80,30 L100,70 L120,50 L140,45 L160,55 L180,20 L200,80 L220,50" fill="none" stroke="#007da9" stroke-width="1" style="transform: translateX(3.41124px);"></path>
+<path d="M220,50 L240,48 L260,52 L280,45 L300,55 L320,50 L1000,50" fill="none" stroke="#007da9" stroke-width="1" style="transform: translateX(3.41124px);"></path>
+</svg>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+<!-- Mobile Bottom NavBar -->
+<nav class="lg:hidden fixed bottom-0 left-0 w-full flex justify-around items-center py-2 px-4 bg-surface dark:bg-inverse-surface border-t border-outline-variant shadow-lg z-50">
+<div class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-full px-4 py-1 active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-sm">waves</span>
+<span class="text-label-xs">Monitor</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-sm">tune</span>
+<span class="text-label-xs">Controls</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-sm">history</span>
+<span class="text-label-xs">History</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-sm">settings</span>
+<span class="text-label-xs">Settings</span>
+</div>
+</nav>
+<script>
+        // Global Waveform Height Control
+        const globalHeightSlider = document.getElementById('global-height-slider');
+        const waveformRows = document.querySelectorAll('.waveform-row');
+
+        globalHeightSlider.addEventListener('input', (e) => {
+            const newHeight = e.target.value + 'px';
+            waveformRows.forEach(row => {
+                row.style.height = newHeight;
+            });
+        });
+
+        // Populate sliders for 4 channels (CH0-CH3) in Audio Control section
+        const sliderContainer = document.getElementById('slider-container');
+        const sliderTemplate = document.getElementById('slider-row');
+        
+        for (let i = 0; i < 4; i++) {
+            const clone = sliderTemplate.content.cloneNode(true);
+            const label = clone.querySelector('span');
+            const slider = clone.querySelector('input[type="range"]');
+            const input = clone.querySelector('input[type="text"]');
+            
+            label.textContent = `CH${i}`;
+            const initialVal = Math.floor(Math.random() * 64);
+            slider.value = initialVal;
+            input.value = initialVal;
+
+            slider.addEventListener('input', (e) => {
+                input.value = e.target.value;
+            });
+            
+            sliderContainer.appendChild(clone);
+        }
+
+        // Simulating waveform drift
+        setInterval(() => {
+            const paths = document.querySelectorAll('#waveform-rows svg path');
+            paths.forEach(p => {
+                if (p.parentElement.parentElement.classList.contains('opacity-80')) return;
+                p.style.transform = `translateX(${Math.sin(Date.now()/500) * 5}px)`;
+            });
+        }, 50);
+
+        // Responsive class toggle logic
+        function checkMobile() {
+            const isMobile = window.innerWidth < 1024;
+        }
+        window.addEventListener('resize', checkMobile);
+        checkMobile();
+    </script>
+
+
+</body></html>
